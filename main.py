@@ -330,7 +330,8 @@ DIFFICULTY = {
     "easy": {"count": 8, "health": 40, "speed": 2, "damage": 5, "fire_rate": 90, "color": GREEN, "points": 100, "coins": 1},
     "medium": {"count": 15, "health": 60, "speed": 3, "damage": 10, "fire_rate": 60, "color": YELLOW, "points": 200, "coins": 3},
     "hard": {"count": 25, "health": 100, "speed": 4, "damage": 15, "fire_rate": 40, "color": RED, "points": 300, "coins": 8},
-    "impossible": {"count": 10, "health": 120, "speed": 5, "damage": 20, "fire_rate": 30, "color": (150, 0, 150), "points": 500, "coins": 15, "waves": 5, "has_boss": True}
+    "impossible": {"count": 10, "health": 120, "speed": 5, "damage": 20, "fire_rate": 30, "color": (150, 0, 150), "points": 500, "coins": 15, "waves": 5, "has_boss": True},
+    "pvp": {"count": 0, "health": 0, "speed": 0, "damage": 0, "fire_rate": 0, "color": WHITE, "points": 0, "coins": 0}  # No robots in PvP
 }
 
 
@@ -2104,6 +2105,150 @@ class Player:
         pygame.draw.line(screen, (60, 60, 60), (bipod_x, bipod_y), (bipod_end_x, bipod_end_y), 2)
 
 
+class Player2(Player):
+    """Second player for PvP and Co-op modes - uses IJKL for movement, aims with numpad"""
+
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        # Player 2 uses different color
+        self.player_color = (255, 100, 100)  # Red-ish color
+        self.aim_direction = 0  # Aim angle controlled by numpad
+        # Player 2 doesn't load saved progress (fresh start for fairness in PvP)
+        self.coins = 0
+        self.has_rpg = False
+        self.has_shotgun = False
+        self.has_sniper = False
+        self.medkit_charges = 0
+        # Remove extra weapons for fairness
+        self.weapons = [
+            {"name": "Rifle", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 10, "damage": 25, "bullet_speed": 15, "color": YELLOW, "gun_length": 12, "gun_width": 6, "melee": False, "grenade": False},
+            {"name": "Handgun", "ammo": 40, "max_ammo": 40, "reloads": 4, "fire_rate": 5, "damage": 10, "bullet_speed": 18, "color": (255, 200, 100), "gun_length": 8, "gun_width": 4, "melee": False, "grenade": False},
+            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20, "damage": 30, "bullet_speed": 0, "color": WHITE, "gun_length": 10, "gun_width": 3, "melee": True, "grenade": False},
+            {"name": "Grenade", "ammo": 10, "max_ammo": 10, "reloads": 0, "fire_rate": 45, "damage": 100, "bullet_speed": 0, "color": (100, 80, 60), "gun_length": 6, "gun_width": 6, "melee": False, "grenade": True, "no_reload": True}
+        ]
+
+    def update(self, keys, target_pos, camera, obstacles):
+        """Player 2 uses IJKL for movement and numpad for aiming"""
+        # Movement (IJKL keys)
+        dx, dy = 0, 0
+        if keys[pygame.K_i]:
+            dy -= self.speed
+        if keys[pygame.K_k]:
+            dy += self.speed
+        if keys[pygame.K_j]:
+            dx -= self.speed
+        if keys[pygame.K_l]:
+            dx += self.speed
+
+        # Normalize diagonal
+        if dx != 0 and dy != 0:
+            dx *= 0.707
+            dy *= 0.707
+
+        # Try to move
+        new_x = self.x + dx
+        new_y = self.y + dy
+
+        # Check obstacle collision
+        can_move_x = True
+        can_move_y = True
+
+        for obs in obstacles:
+            if obs.collides_circle(new_x, self.y, self.radius):
+                can_move_x = False
+            if obs.collides_circle(self.x, new_y, self.radius):
+                can_move_y = False
+
+        if can_move_x:
+            self.x = max(self.radius + 50, min(MAP_WIDTH - self.radius - 50, new_x))
+        if can_move_y:
+            self.y = max(self.radius + 50, min(MAP_HEIGHT - self.radius - 50, new_y))
+
+        # Aiming with numpad (8 directions) or target position (for Co-op/AI)
+        if target_pos:
+            # Aim at target position (like co-op mode aiming at enemies)
+            self.angle = math.atan2(target_pos[1] - self.y, target_pos[0] - self.x)
+        else:
+            # Manual aiming with numpad
+            if keys[pygame.K_KP8]:  # Up
+                self.aim_direction = -math.pi/2
+            elif keys[pygame.K_KP2]:  # Down
+                self.aim_direction = math.pi/2
+            elif keys[pygame.K_KP4]:  # Left
+                self.aim_direction = math.pi
+            elif keys[pygame.K_KP6]:  # Right
+                self.aim_direction = 0
+            elif keys[pygame.K_KP7]:  # Up-Left
+                self.aim_direction = -3*math.pi/4
+            elif keys[pygame.K_KP9]:  # Up-Right
+                self.aim_direction = -math.pi/4
+            elif keys[pygame.K_KP1]:  # Down-Left
+                self.aim_direction = 3*math.pi/4
+            elif keys[pygame.K_KP3]:  # Down-Right
+                self.aim_direction = math.pi/4
+            self.angle = self.aim_direction
+
+        # Cooldowns
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= 1
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Body (flash white when hit) - Player 2 is red/orange
+        body_color = WHITE if self.hit_flash > 0 else self.player_color
+        pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
+        pygame.draw.circle(screen, (255, 200, 200), (int(sx), int(sy)), self.radius, 2)
+
+        # Calculate recoil offset (gun pulls back when shooting)
+        recoil_offset = self.recoil
+
+        # Get reload animation offsets
+        reload_offset_x, reload_offset_y, reload_tilt = self.get_reload_animation_offset()
+
+        # Draw realistic gun based on weapon type
+        weapon_name = self.weapon["name"]
+
+        if weapon_name == "Rifle":
+            self.draw_rifle(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Handgun":
+            self.draw_handgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Knife":
+            self.draw_knife(screen, sx, sy)
+        elif weapon_name == "Grenade":
+            self.draw_grenade_weapon(screen, sx, sy)
+        elif weapon_name == "Shotgun":
+            self.draw_shotgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "RPG":
+            self.draw_rpg(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Sniper":
+            self.draw_sniper(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        else:
+            # Fallback to simple gun
+            gun_length = self.radius + self.weapon["gun_length"] - recoil_offset
+            gun_x = sx + math.cos(self.angle) * gun_length
+            gun_y = sy + math.sin(self.angle) * gun_length
+            pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 6)
+
+        # Draw reload indicator if reloading
+        if self.reloading:
+            bar_width = 40
+            bar_height = 6
+            bar_x = sx - bar_width // 2
+            bar_y = sy - self.radius - 20
+            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            progress_width = int(bar_width * self.reload_phase)
+            pygame.draw.rect(screen, (255, 150, 150), (bar_x, bar_y, progress_width, bar_height))
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+
+        # Draw "P2" label above player
+        font = pygame.font.Font(None, 24)
+        label = font.render("P2", True, (255, 200, 200))
+        screen.blit(label, (sx - label.get_width()//2, sy - self.radius - 35))
+
+
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -2115,8 +2260,10 @@ class Game:
 
         self.state = "login"  # login, menu, playing, gameover, shop
         self.difficulty = "medium"
+        self.game_mode = "solo"  # "solo", "pvp", "coop"
         self.camera = Camera()
         self.shop_prompted = False  # Track if we already asked about RPG
+        self.pvp_winner = None  # Track winner in PvP mode
 
         # Login system
         self.username_input = ""
@@ -2164,7 +2311,17 @@ class Game:
         self.current_music = None
 
     def reset_game(self):
-        self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+        # Player 1 starts on left side, Player 2 on right side (for PvP/coop)
+        if self.game_mode == "pvp":
+            self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
+            self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+        elif self.game_mode == "coop":
+            self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
+            self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
+        else:
+            self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+            self.player2 = None
+        self.pvp_winner = None
         self.robots = []
         self.bullets = []
         self.grenades = []
@@ -2304,6 +2461,74 @@ class Game:
                         elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
                             self.state = "shop"
 
+    def handle_player2_shoot(self):
+        """Handle Player 2 shooting"""
+        if not self.player2 or self.player2.health <= 0:
+            return
+
+        # Check weapon type
+        if self.player2.weapon.get("grenade", False):
+            # Throw grenade
+            result = self.player2.shoot()
+            if result:
+                grenade = Grenade(result["x"], result["y"], result["angle"])
+                self.grenades.append(grenade)
+        elif self.player2.weapon.get("melee", False):
+            # Melee attack
+            result = self.player2.shoot()
+            if result and isinstance(result, dict) and result.get("melee"):
+                self.handle_melee_attack_p2(result)
+        else:
+            # Regular bullet
+            result = self.player2.shoot()
+            if result:
+                # Mark bullet as from player 2 for PvP
+                result.owner = "player2"
+                self.bullets.append(result)
+                self.shell_casings.append(ShellCasing(self.player2.x, self.player2.y, self.player2.angle))
+                self.muzzle_flashes.append(MuzzleFlash(self.player2.x, self.player2.y, self.player2.angle))
+
+    def handle_melee_attack_p2(self, attack):
+        """Handle Player 2 knife melee attack"""
+        melee_range = 50
+        px, py = attack["x"], attack["y"]
+        angle = attack["angle"]
+        damage = attack["damage"]
+
+        # In PvP mode, can hit player 1
+        if self.game_mode == "pvp" and self.player.health > 0:
+            dx = self.player.x - px
+            dy = self.player.y - py
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < melee_range:
+                angle_to_target = math.atan2(dy, dx)
+                angle_diff = abs(angle - angle_to_target)
+                if angle_diff > math.pi:
+                    angle_diff = 2 * math.pi - angle_diff
+                if angle_diff < math.pi / 2:
+                    if self.player.take_damage(damage):
+                        self.pvp_winner = "Player 2"
+                        self.state = "gameover"
+                        self.stop_music()
+                    return
+
+        # In co-op or if missed player 1, hit robots
+        for robot in self.robots[:]:
+            dx = robot.x - px
+            dy = robot.y - py
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < melee_range:
+                angle_to_robot = math.atan2(dy, dx)
+                angle_diff = abs(angle - angle_to_robot)
+                if angle_diff > math.pi:
+                    angle_diff = 2 * math.pi - angle_diff
+                if angle_diff < math.pi / 2:
+                    if robot.take_damage(damage):
+                        self.robots.remove(robot)
+                        self.kills += 1
+                        if self.game_mode != "pvp":
+                            self.score += DIFFICULTY[self.difficulty]["points"]
+
     def handle_touch_events(self, event):
         """Handle touch/mouse events for mobile controls"""
         if not self.mobile_controls or self.state != "playing":
@@ -2412,13 +2637,29 @@ class Game:
 
                 elif self.state == "menu":
                     if event.key == pygame.K_1:
+                        self.game_mode = "solo"
                         self.start_game("easy")
                     elif event.key == pygame.K_2:
+                        self.game_mode = "solo"
                         self.start_game("medium")
                     elif event.key == pygame.K_3:
+                        self.game_mode = "solo"
                         self.start_game("hard")
                     elif event.key == pygame.K_4:
+                        self.game_mode = "solo"
                         self.start_game("impossible")
+                    elif event.key == pygame.K_5:
+                        # PvP mode - 1v1 battle
+                        self.game_mode = "pvp"
+                        self.start_game("pvp")
+                    elif event.key == pygame.K_6:
+                        # Co-op mode - 2 players vs robots (medium)
+                        self.game_mode = "coop"
+                        self.start_game("medium")
+                    elif event.key == pygame.K_7:
+                        # Co-op hard mode
+                        self.game_mode = "coop"
+                        self.start_game("hard")
                     elif event.key == pygame.K_l:
                         # L key - Login/Logout
                         if current_user:
@@ -2432,6 +2673,7 @@ class Game:
                         return False
 
                 elif self.state == "playing":
+                    # Player 1 controls
                     if event.key == pygame.K_r:
                         # Start reload animation (don't instant reload)
                         if not self.player.reloading:
@@ -2449,11 +2691,26 @@ class Game:
                         if self.player.use_medkit():
                             self.healing_effects.append(HealingEffect(self.player.x, self.player.y))
                     elif event.key == pygame.K_TAB:
-                        # Open shop
-                        self.state = "shop"
+                        # Open shop (only in solo/coop)
+                        if self.game_mode != "pvp":
+                            self.state = "shop"
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "menu"
+                        self.game_mode = "solo"
                         self.play_menu_music()
+
+                    # Player 2 controls (only in multiplayer modes)
+                    if self.player2 and self.player2.health > 0:
+                        if event.key == pygame.K_p:
+                            # P key - Player 2 reload
+                            if not self.player2.reloading:
+                                self.player2.start_reload()
+                        elif event.key == pygame.K_u:
+                            # U key - Player 2 switch weapon
+                            self.player2.switch_weapon()
+                        elif event.key == pygame.K_o:
+                            # O key - Player 2 shoot
+                            self.handle_player2_shoot()
 
                 elif self.state == "gameover":
                     if event.key == pygame.K_r:
@@ -2603,8 +2860,31 @@ class Game:
         self.player.update_recoil()  # Update recoil recovery
         self.player.update_reload()  # Update reload animation
 
-        # Update camera
-        self.camera.update(self.player.x, self.player.y)
+        # Update Player 2 (in multiplayer modes)
+        if self.player2 and self.player2.health > 0:
+            # In co-op, Player 2 aims at nearest robot; in PvP, aim at Player 1
+            target_pos = None
+            if self.game_mode == "coop" and self.robots:
+                # Find nearest robot
+                nearest_dist = float('inf')
+                for robot in self.robots:
+                    dist = math.sqrt((robot.x - self.player2.x)**2 + (robot.y - self.player2.y)**2)
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        target_pos = (robot.x, robot.y)
+            # In PvP, numpad controls aim (no auto-aim at player 1)
+
+            self.player2.update(keys, target_pos, self.camera, self.obstacles)
+            self.player2.update_recoil()
+            self.player2.update_reload()
+
+        # Update camera (in multiplayer, focus on midpoint between players)
+        if self.player2 and self.player2.health > 0 and self.player.health > 0:
+            mid_x = (self.player.x + self.player2.x) // 2
+            mid_y = (self.player.y + self.player2.y) // 2
+            self.camera.update(mid_x, mid_y)
+        else:
+            self.camera.update(self.player.x, self.player.y)
 
         # Update shell casings
         for casing in self.shell_casings[:]:
@@ -2639,26 +2919,50 @@ class Game:
             if bullet not in self.bullets:
                 continue
 
-            # Player bullets hit robots
+            # Player bullets hit robots (and other player in PvP)
             if bullet.is_player:
                 hit_something = False
+                bullet_owner = getattr(bullet, 'owner', 'player1')
 
-                # Check robots
-                for robot in self.robots[:]:
-                    dist = math.sqrt((bullet.x - robot.x)**2 + (bullet.y - robot.y)**2)
-                    if dist < robot.radius + bullet.radius:
-                        if robot.take_damage(bullet.get_damage()):
-                            self.robots.remove(robot)
-                            self.kills += 1
-                            self.score += DIFFICULTY[self.difficulty]["points"]
-                            self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])  # Add coins for kill
-                            # Check if player has 10 coins for shotgun or 50 for RPG
-                            if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
-                                self.state = "shop"
-                            elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
-                                self.state = "shop"
-                        hit_something = True
-                        break
+                # In PvP mode, check if bullet hits the OTHER player
+                if self.game_mode == "pvp":
+                    if bullet_owner == "player2" and self.player.health > 0:
+                        # Player 2's bullet can hit Player 1
+                        dist = math.sqrt((bullet.x - self.player.x)**2 + (bullet.y - self.player.y)**2)
+                        if dist < self.player.radius + bullet.radius:
+                            if self.player.take_damage(bullet.get_damage()):
+                                self.pvp_winner = "Player 2"
+                                self.state = "gameover"
+                                self.stop_music()
+                            hit_something = True
+                    elif bullet_owner != "player2" and self.player2 and self.player2.health > 0:
+                        # Player 1's bullet can hit Player 2
+                        dist = math.sqrt((bullet.x - self.player2.x)**2 + (bullet.y - self.player2.y)**2)
+                        if dist < self.player2.radius + bullet.radius:
+                            if self.player2.take_damage(bullet.get_damage()):
+                                self.pvp_winner = "Player 1"
+                                self.state = "gameover"
+                                self.stop_music()
+                            hit_something = True
+
+                # Check robots (co-op and solo modes)
+                if not hit_something:
+                    for robot in self.robots[:]:
+                        dist = math.sqrt((bullet.x - robot.x)**2 + (bullet.y - robot.y)**2)
+                        if dist < robot.radius + bullet.radius:
+                            if robot.take_damage(bullet.get_damage()):
+                                self.robots.remove(robot)
+                                self.kills += 1
+                                if self.game_mode != "pvp":
+                                    self.score += DIFFICULTY[self.difficulty]["points"]
+                                    self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])  # Add coins for kill
+                                    # Check if player has 10 coins for shotgun or 50 for RPG
+                                    if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
+                                        self.state = "shop"
+                                    elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
+                                        self.state = "shop"
+                            hit_something = True
+                            break
 
                 # Check boss
                 if not hit_something and self.boss:
@@ -2675,15 +2979,34 @@ class Game:
                 if hit_something and bullet in self.bullets:
                     self.bullets.remove(bullet)
 
-            # Robot bullets hit player
+            # Robot bullets hit players
             else:
+                hit_player = False
+                # Check Player 1
                 dist = math.sqrt((bullet.x - self.player.x)**2 + (bullet.y - self.player.y)**2)
                 if dist < self.player.radius + bullet.radius:
                     if self.player.take_damage(bullet.damage):
-                        self.state = "gameover"
-                        self.stop_music()
-                    if bullet in self.bullets:
-                        self.bullets.remove(bullet)
+                        if self.game_mode == "coop" and self.player2 and self.player2.health > 0:
+                            pass  # Player 2 still alive, continue
+                        else:
+                            self.state = "gameover"
+                            self.stop_music()
+                    hit_player = True
+
+                # Check Player 2 (in co-op)
+                if not hit_player and self.game_mode == "coop" and self.player2 and self.player2.health > 0:
+                    dist = math.sqrt((bullet.x - self.player2.x)**2 + (bullet.y - self.player2.y)**2)
+                    if dist < self.player2.radius + bullet.radius:
+                        if self.player2.take_damage(bullet.damage):
+                            if self.player.health > 0:
+                                pass  # Player 1 still alive, continue
+                            else:
+                                self.state = "gameover"
+                                self.stop_music()
+                        hit_player = True
+
+                if hit_player and bullet in self.bullets:
+                    self.bullets.remove(bullet)
 
         # Update grenades
         for grenade in self.grenades[:]:
@@ -2843,20 +3166,46 @@ class Game:
         pygame.draw.rect(self.screen, WHITE, (cx, cy, cw, ch), 1)
 
     def draw_hud(self):
-        # Health bar
+        # Player 1 Health bar
         bar_width = 250
         bar_height = 25
         bar_x = 20
         bar_y = 20
 
+        # P1 label in multiplayer
+        if self.player2:
+            p1_label = self.small_font.render("P1", True, BLUE)
+            self.screen.blit(p1_label, (bar_x, bar_y - 18))
+
         pygame.draw.rect(self.screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
-        health_width = int((self.player.health / self.player.max_health) * bar_width)
+        health_width = int((max(0, self.player.health) / self.player.max_health) * bar_width)
         health_color = GREEN if self.player.health > 50 else YELLOW if self.player.health > 25 else RED
         pygame.draw.rect(self.screen, health_color, (bar_x, bar_y, health_width, bar_height))
         pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
 
-        hp_text = self.small_font.render(f"HP: {int(self.player.health)}", True, WHITE)
+        hp_text = self.small_font.render(f"HP: {int(max(0, self.player.health))}", True, WHITE)
         self.screen.blit(hp_text, (bar_x + 5, bar_y + 3))
+
+        # Player 2 Health bar (in multiplayer modes)
+        if self.player2:
+            p2_bar_x = SCREEN_WIDTH - bar_width - 20
+            p2_bar_y = 20
+
+            p2_label = self.small_font.render("P2", True, (255, 150, 150))
+            self.screen.blit(p2_label, (p2_bar_x, p2_bar_y - 18))
+
+            pygame.draw.rect(self.screen, DARK_GRAY, (p2_bar_x, p2_bar_y, bar_width, bar_height))
+            p2_health_width = int((max(0, self.player2.health) / self.player2.max_health) * bar_width)
+            p2_health_color = GREEN if self.player2.health > 50 else YELLOW if self.player2.health > 25 else RED
+            pygame.draw.rect(self.screen, p2_health_color, (p2_bar_x, p2_bar_y, p2_health_width, bar_height))
+            pygame.draw.rect(self.screen, (255, 200, 200), (p2_bar_x, p2_bar_y, bar_width, bar_height), 2)
+
+            p2_hp_text = self.small_font.render(f"HP: {int(max(0, self.player2.health))}", True, WHITE)
+            self.screen.blit(p2_hp_text, (p2_bar_x + 5, p2_bar_y + 3))
+
+            # P2 weapon info
+            p2_weapon_text = self.small_font.render(f"{self.player2.weapon['name']}: {self.player2.ammo}", True, (255, 150, 150))
+            self.screen.blit(p2_weapon_text, (p2_bar_x, p2_bar_y + 30))
 
         # Weapon and Ammo with reloads on the right
         weapon_name = self.player.weapon["name"]
@@ -3058,46 +3407,52 @@ class Game:
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
         subtitle = self.font.render("ROBOT BATTLE", True, WHITE)
 
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 150))
-        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 230))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
+        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 150))
+
+        # Solo mode section
+        solo_header = self.font.render("-- SOLO MODE --", True, LIGHT_BLUE)
+        self.screen.blit(solo_header, (SCREEN_WIDTH // 2 - solo_header.get_width() // 2, 200))
 
         # Difficulty options
-        easy = self.font.render("[1] EASY - 8 Robots", True, GREEN)
-        medium = self.font.render("[2] MEDIUM - 15 Robots", True, YELLOW)
-        hard = self.font.render("[3] HARD - 25 Robots", True, RED)
-        impossible = self.font.render("[4] IMPOSSIBLE - 5 Waves + BOSS", True, (150, 0, 150))
+        easy = self.small_font.render("[1] EASY - 8 Robots", True, GREEN)
+        medium = self.small_font.render("[2] MEDIUM - 15 Robots", True, YELLOW)
+        hard = self.small_font.render("[3] HARD - 25 Robots", True, RED)
+        impossible = self.small_font.render("[4] IMPOSSIBLE - 5 Waves + BOSS", True, (150, 0, 150))
 
-        self.screen.blit(easy, (SCREEN_WIDTH // 2 - easy.get_width() // 2, 330))
-        self.screen.blit(medium, (SCREEN_WIDTH // 2 - medium.get_width() // 2, 380))
-        self.screen.blit(hard, (SCREEN_WIDTH // 2 - hard.get_width() // 2, 430))
-        self.screen.blit(impossible, (SCREEN_WIDTH // 2 - impossible.get_width() // 2, 480))
+        self.screen.blit(easy, (SCREEN_WIDTH // 2 - easy.get_width() // 2, 240))
+        self.screen.blit(medium, (SCREEN_WIDTH // 2 - medium.get_width() // 2, 270))
+        self.screen.blit(hard, (SCREEN_WIDTH // 2 - hard.get_width() // 2, 300))
+        self.screen.blit(impossible, (SCREEN_WIDTH // 2 - impossible.get_width() // 2, 330))
 
-        # Web version notice
-        web_notice = self.small_font.render("Web Version - Progress saves during session", True, LIGHT_BLUE)
-        self.screen.blit(web_notice, (SCREEN_WIDTH // 2 - web_notice.get_width() // 2, 530))
+        # Multiplayer section
+        multi_header = self.font.render("-- 2 PLAYER MODES --", True, ORANGE)
+        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 380))
 
-        # Controls
-        controls = [
-            "WASD / Arrow Keys - Move | Mouse - Aim | Left Click - Shoot",
-            "Q - Switch Weapon | R - Reload | H - Medkit | ESC - Menu"
-        ]
+        pvp = self.small_font.render("[5] PvP - Player vs Player (1v1 Battle)", True, (255, 100, 100))
+        coop = self.small_font.render("[6] CO-OP - Team up vs Robots (Medium)", True, (100, 255, 100))
+        coop_hard = self.small_font.render("[7] CO-OP HARD - Team up vs Robots (Hard)", True, (255, 200, 100))
 
-        y = 580
-        for ctrl in controls:
-            text = self.small_font.render(ctrl, True, GRAY)
-            self.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, y))
-            y += 30
+        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 420))
+        self.screen.blit(coop, (SCREEN_WIDTH // 2 - coop.get_width() // 2, 450))
+        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 480))
 
-        # Map size info
-        map_info = self.small_font.render(f"Map Size: {MAP_WIDTH}x{MAP_HEIGHT}", True, LIGHT_BLUE)
-        self.screen.blit(map_info, (SCREEN_WIDTH // 2 - map_info.get_width() // 2, y + 20))
+        # Controls section
+        controls_header = self.small_font.render("-- CONTROLS --", True, GRAY)
+        self.screen.blit(controls_header, (SCREEN_WIDTH // 2 - controls_header.get_width() // 2, 520))
+
+        p1_controls = self.small_font.render("P1: WASD Move | Mouse Aim | Click Shoot | Q Switch | R Reload", True, BLUE)
+        p2_controls = self.small_font.render("P2: IJKL Move | NumPad Aim | O Shoot | U Switch | P Reload", True, (255, 150, 150))
+
+        self.screen.blit(p1_controls, (SCREEN_WIDTH // 2 - p1_controls.get_width() // 2, 550))
+        self.screen.blit(p2_controls, (SCREEN_WIDTH // 2 - p2_controls.get_width() // 2, 575))
 
         # Show logged in user or guest status
         if current_user:
             user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
         else:
             user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, y + 45))
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 620))
 
     def draw_gameover(self):
         # Darken screen
@@ -3106,17 +3461,35 @@ class Game:
         overlay.set_alpha(180)
         self.screen.blit(overlay, (0, 0))
 
-        # Result
-        if len(self.robots) == 0:
-            result = self.big_font.render("VICTORY!", True, GREEN)
+        # Result - different for PvP mode
+        if self.game_mode == "pvp" and self.pvp_winner:
+            result = self.big_font.render(f"{self.pvp_winner} WINS!", True, GREEN)
+            subtitle = self.font.render("PvP Battle Complete", True, YELLOW)
+            self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 280))
+            self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 360))
+        elif self.game_mode == "coop":
+            # Co-op mode
+            if len(self.robots) == 0:
+                result = self.big_font.render("VICTORY!", True, GREEN)
+                subtitle = self.font.render("Team Win! Great Teamwork!", True, GREEN)
+            else:
+                result = self.big_font.render("GAME OVER", True, RED)
+                subtitle = self.font.render("Both players defeated!", True, RED)
+            self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 280))
+            self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 360))
+            # Score
+            score = self.font.render(f"Score: {self.score} | Kills: {self.kills}", True, WHITE)
+            self.screen.blit(score, (SCREEN_WIDTH // 2 - score.get_width() // 2, 410))
         else:
-            result = self.big_font.render("GAME OVER", True, RED)
-
-        self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 300))
-
-        # Score
-        score = self.font.render(f"Score: {self.score} | Kills: {self.kills}", True, WHITE)
-        self.screen.blit(score, (SCREEN_WIDTH // 2 - score.get_width() // 2, 400))
+            # Solo mode
+            if len(self.robots) == 0:
+                result = self.big_font.render("VICTORY!", True, GREEN)
+            else:
+                result = self.big_font.render("GAME OVER", True, RED)
+            self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 300))
+            # Score
+            score = self.font.render(f"Score: {self.score} | Kills: {self.kills}", True, WHITE)
+            self.screen.blit(score, (SCREEN_WIDTH // 2 - score.get_width() // 2, 400))
 
         # Options
         retry = self.small_font.render("[R] Play Again | [ESC] Menu", True, GRAY)
@@ -3240,6 +3613,10 @@ class Game:
 
             # Draw player
             self.player.draw(self.screen, self.camera)
+
+            # Draw Player 2 (in multiplayer modes)
+            if self.player2 and self.player2.health > 0:
+                self.player2.draw(self.screen, self.camera)
 
             # Draw muzzle flashes (in front of player)
             for flash in self.muzzle_flashes:
