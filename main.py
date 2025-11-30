@@ -2261,6 +2261,9 @@ class Game:
         self.state = "login"  # login, menu, playing, gameover, shop
         self.difficulty = "medium"
         self.game_mode = "solo"  # "solo", "pvp", "coop"
+        self.selected_map = "random"  # Map selection: random, arena, corridors, fortress, open
+        self.map_names = ["random", "arena", "corridors", "fortress", "open"]
+        self.map_index = 0
         self.camera = Camera()
         self.shop_prompted = False  # Track if we already asked about RPG
         self.pvp_winner = None  # Track winner in PvP mode
@@ -2346,14 +2349,31 @@ class Game:
     def create_obstacles(self):
         self.obstacles = []
 
-        # Border walls
+        # Border walls (always present)
         wall_thickness = 50
         self.obstacles.append(Obstacle(0, 0, MAP_WIDTH, wall_thickness))  # Top
         self.obstacles.append(Obstacle(0, MAP_HEIGHT - wall_thickness, MAP_WIDTH, wall_thickness))  # Bottom
         self.obstacles.append(Obstacle(0, 0, wall_thickness, MAP_HEIGHT))  # Left
         self.obstacles.append(Obstacle(MAP_WIDTH - wall_thickness, 0, wall_thickness, MAP_HEIGHT))  # Right
 
-        # Random cover obstacles throughout the map
+        # Create map based on selected map type
+        map_type = getattr(self, 'selected_map', 'random')
+
+        if map_type == 'random':
+            self.create_random_map()
+        elif map_type == 'arena':
+            self.create_arena_map()
+        elif map_type == 'corridors':
+            self.create_corridors_map()
+        elif map_type == 'fortress':
+            self.create_fortress_map()
+        elif map_type == 'open':
+            self.create_open_map()
+        else:
+            self.create_random_map()
+
+    def create_random_map(self):
+        """Original random obstacle placement"""
         num_obstacles = 60
         for _ in range(num_obstacles):
             width = random.randint(60, 150)
@@ -2365,6 +2385,112 @@ class Game:
             center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
             if abs(x + width/2 - center_x) > 200 or abs(y + height/2 - center_y) > 200:
                 self.obstacles.append(Obstacle(x, y, width, height))
+
+    def create_arena_map(self):
+        """Circular arena with pillars"""
+        center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
+
+        # Central pillar
+        self.obstacles.append(Obstacle(center_x - 75, center_y - 75, 150, 150))
+
+        # Ring of pillars around center
+        ring_radius = 400
+        num_pillars = 8
+        for i in range(num_pillars):
+            angle = (2 * math.pi * i) / num_pillars
+            px = center_x + math.cos(angle) * ring_radius - 40
+            py = center_y + math.sin(angle) * ring_radius - 40
+            self.obstacles.append(Obstacle(int(px), int(py), 80, 80))
+
+        # Outer ring
+        outer_radius = 700
+        for i in range(12):
+            angle = (2 * math.pi * i) / 12 + 0.26  # Offset
+            px = center_x + math.cos(angle) * outer_radius - 50
+            py = center_y + math.sin(angle) * outer_radius - 50
+            self.obstacles.append(Obstacle(int(px), int(py), 100, 100))
+
+    def create_corridors_map(self):
+        """Map with corridors and rooms"""
+        # Vertical walls creating corridors
+        corridor_width = 200
+        wall_length = 600
+
+        # Left corridor walls
+        self.obstacles.append(Obstacle(400, 100, 60, wall_length))
+        self.obstacles.append(Obstacle(400, MAP_HEIGHT - wall_length - 100, 60, wall_length))
+
+        # Right corridor walls
+        self.obstacles.append(Obstacle(MAP_WIDTH - 460, 100, 60, wall_length))
+        self.obstacles.append(Obstacle(MAP_WIDTH - 460, MAP_HEIGHT - wall_length - 100, 60, wall_length))
+
+        # Horizontal walls
+        self.obstacles.append(Obstacle(100, 400, wall_length, 60))
+        self.obstacles.append(Obstacle(MAP_WIDTH - wall_length - 100, 400, wall_length, 60))
+        self.obstacles.append(Obstacle(100, MAP_HEIGHT - 460, wall_length, 60))
+        self.obstacles.append(Obstacle(MAP_WIDTH - wall_length - 100, MAP_HEIGHT - 460, wall_length, 60))
+
+        # Center room walls
+        center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
+        room_size = 300
+        wall_gap = 150  # Gap for entry
+
+        # Top wall with gap
+        self.obstacles.append(Obstacle(center_x - room_size, center_y - room_size, room_size - wall_gap//2, 40))
+        self.obstacles.append(Obstacle(center_x + wall_gap//2, center_y - room_size, room_size - wall_gap//2, 40))
+        # Bottom wall with gap
+        self.obstacles.append(Obstacle(center_x - room_size, center_y + room_size - 40, room_size - wall_gap//2, 40))
+        self.obstacles.append(Obstacle(center_x + wall_gap//2, center_y + room_size - 40, room_size - wall_gap//2, 40))
+        # Left wall with gap
+        self.obstacles.append(Obstacle(center_x - room_size, center_y - room_size, 40, room_size - wall_gap//2))
+        self.obstacles.append(Obstacle(center_x - room_size, center_y + wall_gap//2, 40, room_size - wall_gap//2))
+        # Right wall with gap
+        self.obstacles.append(Obstacle(center_x + room_size - 40, center_y - room_size, 40, room_size - wall_gap//2))
+        self.obstacles.append(Obstacle(center_x + room_size - 40, center_y + wall_gap//2, 40, room_size - wall_gap//2))
+
+    def create_fortress_map(self):
+        """Map with four corner fortresses"""
+        fort_size = 250
+        wall_thick = 50
+        gap = 100  # Entry gap
+
+        corners = [
+            (150, 150),  # Top-left
+            (MAP_WIDTH - 150 - fort_size, 150),  # Top-right
+            (150, MAP_HEIGHT - 150 - fort_size),  # Bottom-left
+            (MAP_WIDTH - 150 - fort_size, MAP_HEIGHT - 150 - fort_size)  # Bottom-right
+        ]
+
+        for fx, fy in corners:
+            # Top wall
+            self.obstacles.append(Obstacle(fx, fy, fort_size, wall_thick))
+            # Bottom wall with gap
+            self.obstacles.append(Obstacle(fx, fy + fort_size - wall_thick, (fort_size - gap)//2, wall_thick))
+            self.obstacles.append(Obstacle(fx + (fort_size + gap)//2, fy + fort_size - wall_thick, (fort_size - gap)//2, wall_thick))
+            # Left wall with gap
+            self.obstacles.append(Obstacle(fx, fy, wall_thick, (fort_size - gap)//2))
+            self.obstacles.append(Obstacle(fx, fy + (fort_size + gap)//2, wall_thick, (fort_size - gap)//2))
+            # Right wall
+            self.obstacles.append(Obstacle(fx + fort_size - wall_thick, fy, wall_thick, fort_size))
+
+        # Center cross
+        center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
+        cross_length = 300
+        cross_thick = 60
+        self.obstacles.append(Obstacle(center_x - cross_length//2, center_y - cross_thick//2, cross_length, cross_thick))
+        self.obstacles.append(Obstacle(center_x - cross_thick//2, center_y - cross_length//2, cross_thick, cross_length))
+
+    def create_open_map(self):
+        """Very few obstacles - mostly open space"""
+        center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
+
+        # Just 4 pillars near center
+        pillar_dist = 350
+        pillar_size = 80
+        self.obstacles.append(Obstacle(center_x - pillar_dist, center_y - pillar_dist, pillar_size, pillar_size))
+        self.obstacles.append(Obstacle(center_x + pillar_dist - pillar_size, center_y - pillar_dist, pillar_size, pillar_size))
+        self.obstacles.append(Obstacle(center_x - pillar_dist, center_y + pillar_dist - pillar_size, pillar_size, pillar_size))
+        self.obstacles.append(Obstacle(center_x + pillar_dist - pillar_size, center_y + pillar_dist - pillar_size, pillar_size, pillar_size))
 
     def spawn_robots(self):
         settings = DIFFICULTY[self.difficulty]
@@ -2669,6 +2795,14 @@ class Game:
                             self.username_input = ""
                             self.passcode_input = ""
                             self.login_message = ""
+                    elif event.key == pygame.K_LEFT or event.key == pygame.K_COMMA:
+                        # Previous map (< key or left arrow)
+                        self.map_index = (self.map_index - 1) % len(self.map_names)
+                        self.selected_map = self.map_names[self.map_index]
+                    elif event.key == pygame.K_RIGHT or event.key == pygame.K_PERIOD:
+                        # Next map (> key or right arrow)
+                        self.map_index = (self.map_index + 1) % len(self.map_names)
+                        self.selected_map = self.map_names[self.map_index]
                     elif event.key == pygame.K_ESCAPE:
                         return False
 
@@ -3437,22 +3571,30 @@ class Game:
         self.screen.blit(coop, (SCREEN_WIDTH // 2 - coop.get_width() // 2, 450))
         self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 480))
 
+        # Map selection section
+        map_header = self.small_font.render("-- MAP: Use [<] [>] to change --", True, GRAY)
+        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 510))
+
+        # Display current map with arrows
+        map_display = self.font.render(f"< {self.selected_map.upper()} >", True, (100, 200, 255))
+        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 535))
+
         # Controls section
         controls_header = self.small_font.render("-- CONTROLS --", True, GRAY)
-        self.screen.blit(controls_header, (SCREEN_WIDTH // 2 - controls_header.get_width() // 2, 520))
+        self.screen.blit(controls_header, (SCREEN_WIDTH // 2 - controls_header.get_width() // 2, 575))
 
-        p1_controls = self.small_font.render("P1: WASD Move | Mouse Aim | Click Shoot | Q Switch | R Reload", True, BLUE)
-        p2_controls = self.small_font.render("P2: IJKL Move | NumPad Aim | O Shoot | U Switch | P Reload", True, (255, 150, 150))
+        p1_controls = self.small_font.render("P1: WASD | Mouse | Click | Q/R", True, BLUE)
+        p2_controls = self.small_font.render("P2: IJKL | NumPad | O | U/P", True, (255, 150, 150))
 
-        self.screen.blit(p1_controls, (SCREEN_WIDTH // 2 - p1_controls.get_width() // 2, 550))
-        self.screen.blit(p2_controls, (SCREEN_WIDTH // 2 - p2_controls.get_width() // 2, 575))
+        self.screen.blit(p1_controls, (SCREEN_WIDTH // 2 - p1_controls.get_width() // 2, 600))
+        self.screen.blit(p2_controls, (SCREEN_WIDTH // 2 - p2_controls.get_width() // 2, 625))
 
         # Show logged in user or guest status
         if current_user:
             user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
         else:
             user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 620))
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 660))
 
     def draw_gameover(self):
         # Darken screen
