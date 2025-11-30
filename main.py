@@ -2865,10 +2865,10 @@ class Game:
                             self.player.unlock_rpg()
                         self.state = "playing"
                     elif event.key == pygame.K_3:
-                        # Buy Medkit (sets to 3 charges, can buy when < 3)
-                        if self.player.coins >= 90 and self.player.medkit_charges < 3:
+                        # Buy Medkit (one-time purchase only)
+                        if self.player.coins >= 90 and self.player.medkit_charges == 0:
                             self.player.coins -= 90
-                            self.player.medkit_charges = 3  # Reset to full charges
+                            self.player.medkit_charges = 3
                             self.player.save_progress()
                         self.state = "playing"
                     elif event.key == pygame.K_4:
@@ -3687,15 +3687,11 @@ class Game:
         self.screen.blit(rpg_text, (box_x + 30, item_y))
         self.screen.blit(rpg_desc, (box_x + 30, item_y + 30))
 
-        # Item 3: Medkit (can rebuy when charges < 3)
+        # Item 3: Medkit (one-time purchase)
         item_y += 70
-        if self.player.medkit_charges >= 3:
-            medkit_text = self.font.render("[3] Medkit - FULL", True, GREEN)
+        if self.player.medkit_charges > 0:
+            medkit_text = self.font.render("[3] Medkit - OWNED", True, GREEN)
             medkit_desc = self.small_font.render(f"You have {self.player.medkit_charges} charges | Press H to use", True, GREEN)
-        elif self.player.medkit_charges > 0:
-            medkit_color = WHITE if self.player.coins >= 90 else GRAY
-            medkit_text = self.font.render(f"[3] Medkit - 90 coins ({self.player.medkit_charges}/3)", True, medkit_color)
-            medkit_desc = self.small_font.render("Refill to 3 charges | Press H to use", True, GREEN)
         else:
             medkit_color = WHITE if self.player.coins >= 90 else GRAY
             medkit_text = self.font.render("[3] Medkit - 90 coins", True, medkit_color)
