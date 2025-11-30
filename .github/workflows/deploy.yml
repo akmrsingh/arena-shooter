@@ -26,14 +26,13 @@ jobs:
         run: |
           pygbag --build main.py
 
-      - name: Download Butler
-        run: |
-          curl -L -o butler.zip https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
-          unzip butler.zip
-          chmod +x butler
+      - name: Install Butler
+        uses: jdno/setup-butler@v1
+        with:
+          version: "15.21.0"
 
       - name: Deploy to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
-          ./butler push build/web akmrsingh/2d-shooter-game:html5
+          butler push build/web akmrsingh/2d-shooter-game:html5
