@@ -3538,6 +3538,10 @@ class Game:
     def draw_menu(self):
         self.screen.fill(DARK_GRAY)
 
+        # Version number in top right
+        version = self.small_font.render("v2.0", True, GRAY)
+        self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
+
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
         subtitle = self.font.render("ROBOT BATTLE", True, WHITE)
 
