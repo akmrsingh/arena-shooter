@@ -1,0 +1,193 @@
+# Arena Shooter 2D - Robot Battle
+
+A top-down 2D arena shooter game built with Python and Pygame. Fight waves of robot enemies, unlock weapons, and survive!
+
+## How to Play
+
+### Controls
+| Key | Action |
+|-----|--------|
+| WASD / Arrow Keys | Move |
+| Mouse | Aim |
+| Left Click | Shoot / Throw Grenade |
+| Q | Switch Weapon |
+| R | Reload |
+| H | Use Medkit (heals to full HP) |
+| Enter | Knife Attack (when knife equipped) |
+| TAB | Open Shop |
+| ESC | Return to Menu |
+
+### Weapons
+- **Rifle** - Balanced automatic weapon (30 rounds)
+- **Handgun** - Fast firing pistol (12 rounds)
+- **Knife** - Melee weapon, no ammo needed
+- **Grenade** - Explosive, area damage (3 grenades)
+- **Shotgun** - Spread shot, high close-range damage (8 shells) - *Shop: 10 coins*
+- **RPG** - Rocket launcher with explosions (3 rockets) - *Shop: 50 coins*
+- **Sniper** - High damage, long range (5 rounds) - *Shop: 150 coins*
+- **Medkit** - Heals to full HP, 3 charges - *Shop: 90 coins*
+
+### Game Modes
+1. **Easy** - 8 robots, low damage
+2. **Medium** - 15 robots, moderate difficulty
+3. **Hard** - 25 robots, high damage and speed
+4. **Impossible** - 5 waves + BOSS fight!
+
+### Tips
+- Use cover! Hide behind obstacles to avoid enemy fire
+- Knife-wielding robots are faster but can only melee
+- Save coins to buy powerful weapons from the shop
+- The minimap (bottom-right) shows enemy positions
+- Reload before engaging large groups
+
+---
+
+## Running the Game
+
+### Desktop Version (Python)
+Requires Python 3.8+ and Pygame.
+
+```bash
+# Install dependencies
+pip install pygame
+
+# Run the game
+cd /path/to/ani-games
+python aarav_games.py
+```
+
+### Web Version
+The web version is pre-built in the `build/web` folder.
+
+**Test locally:**
+```bash
+cd build/web
+python3 -m http.server 8000
+```
+Then open http://localhost:8000 in your browser.
+
+---
+
+## Deploying to the Web
+
+### Option 1: itch.io (Recommended - Free)
+
+1. **Create account** at https://itch.io
+
+2. **Create new project:**
+   - Click profile icon → "Upload new project"
+   - Title: "Arena Shooter 2D - Robot Battle"
+   - Kind of project: **HTML**
+   - Classification: Games
+
+3. **Upload files:**
+   - Upload all files from `build/web/` folder:
+     - `index.html`
+     - `favicon.png`
+     - `web_build.apk`
+   - Check **"This file will be played in the browser"**
+
+4. **Configure embed:**
+   - Width: **1400**
+   - Height: **900**
+   - Enable "Click to launch in fullscreen"
+
+5. **Publish:**
+   - Save and preview
+   - Set Visibility to **Public**
+
+Your game URL: `https://yourusername.itch.io/arena-shooter-2d`
+
+### Option 2: GitHub Pages (Free)
+
+1. **Create GitHub repository**
+
+2. **Upload build files:**
+   ```bash
+   cd build/web
+   git init
+   git add .
+   git commit -m "Initial web build"
+   git branch -M main
+   git remote add origin https://github.com/yourusername/arena-shooter.git
+   git push -u origin main
+   ```
+
+3. **Enable GitHub Pages:**
+   - Go to repository Settings → Pages
+   - Source: Deploy from branch
+   - Branch: main, folder: / (root)
+   - Save
+
+Your game URL: `https://yourusername.github.io/arena-shooter/`
+
+### Option 3: Netlify (Free)
+
+1. Go to https://netlify.com and sign up
+
+2. Drag and drop the `build/web` folder to deploy
+
+3. Get your free URL instantly!
+
+---
+
+## Rebuilding the Web Version
+
+If you modify the game, rebuild with:
+
+```bash
+# Install pygbag if not installed
+pip install pygbag
+
+# Build
+cd /path/to/web_build
+pygbag --build main.py
+```
+
+Output will be in `build/web/`
+
+---
+
+## Project Structure
+
+```
+ani-games/
+├── aarav_games.py      # Main game (desktop + multiplayer)
+├── save_data.json      # Save file (coins, unlocks)
+└── web_build/
+    ├── main.py         # Web-compatible version
+    ├── README.md       # This file
+    └── build/
+        └── web/        # Deployable web files
+            ├── index.html
+            ├── favicon.png
+            └── web_build.apk
+```
+
+---
+
+## Features
+
+- 4 difficulty levels + boss fight
+- 8 unique weapons with realistic visuals
+- Shell casings and muzzle flash effects
+- Reload animations
+- Healing effects with medkit
+- Shop system with persistent coins
+- Minimap
+- Procedurally generated music
+
+## Web Version Notes
+
+- Progress saves during session only (resets on page refresh)
+- Multiplayer not available in web version
+- Works best in Chrome/Firefox/Edge
+
+---
+
+## Credits
+
+Built with Python and Pygame
+Web version powered by Pygbag
+
+Enjoy the game!

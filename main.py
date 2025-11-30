@@ -1,0 +1,3057 @@
+#!/usr/bin/env python3
+"""
+Arena Shooter 2D - Robot Battle
+Top-down shooter with robot enemies (Web Version)
+
+Controls:
+- WASD/Arrow Keys: Move
+- Mouse: Aim
+- Left Click: Shoot/Throw Grenade
+- Q: Switch Weapon
+- Enter: Knife Attack
+- R: Reload
+- ESC: Menu
+
+Weapons: Rifle, Handgun, Knife, Grenade, RPG (shop)
+"""
+
+import asyncio
+import pygame
+import math
+import random
+import sys
+import struct
+import io
+
+# Web version - no file saving, no networking
+WEB_VERSION = True
+
+pygame.init()
+# Disable mixer for web (causes issues)
+try:
+    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+except:
+    pass
+
+
+def generate_boss_music():
+    """Generate intense boss battle music programmatically"""
+    sample_rate = 44100
+    duration = 8  # 8 second loop
+    num_samples = sample_rate * duration
+
+    # Create audio buffer
+    audio_data = []
+
+    # Boss music parameters - intense and fast
+    bpm = 140
+    beat_duration = 60.0 / bpm
+    samples_per_beat = int(sample_rate * beat_duration)
+
+    # Bass frequencies for intense feel
+    bass_notes = [55, 55, 65, 55, 55, 65, 73, 65]  # A1, A1, C2, A1, etc
+
+    for i in range(num_samples):
+        t = i / sample_rate
+        beat = int(t / beat_duration) % 8
+
+        # Heavy bass drum on beats
+        bass_drum = 0
+        beat_pos = (t % beat_duration) / beat_duration
+        if beat_pos < 0.1:
+            bass_drum = math.sin(2 * math.pi * 60 * t) * (1 - beat_pos * 10) * 0.5
+
+        # Snare on off-beats
+        snare = 0
+        if beat in [1, 3, 5, 7] and beat_pos < 0.05:
+            snare = random.uniform(-0.3, 0.3) * (1 - beat_pos * 20)
+
+        # Bass synth
+        bass_freq = bass_notes[beat]
+        bass = math.sin(2 * math.pi * bass_freq * t) * 0.3
+
+        # Add some grit to bass
+        bass += math.sin(2 * math.pi * bass_freq * 2 * t) * 0.1
+
+        # High intensity lead melody
+        lead_freq = bass_freq * 4
+        lead = math.sin(2 * math.pi * lead_freq * t) * 0.15
+        lead += math.sin(2 * math.pi * lead_freq * 1.5 * t) * 0.05
+
+        # Combine all elements
+        sample = bass_drum + snare + bass + lead
+
+        # Soft clip to prevent distortion
+        sample = max(-0.9, min(0.9, sample))
+
+        # Convert to 16-bit integer
+        audio_data.append(int(sample * 32767))
+
+    # Create stereo sound
+    sound_buffer = io.BytesIO()
+    for sample in audio_data:
+        # Write same sample to both channels (stereo)
+        sound_buffer.write(struct.pack('<hh', sample, sample))
+
+    sound_buffer.seek(0)
+    sound = pygame.mixer.Sound(buffer=sound_buffer.getvalue())
+    return sound
+
+
+def generate_menu_music():
+    """Generate calmer menu music"""
+    sample_rate = 44100
+    duration = 6
+    num_samples = sample_rate * duration
+
+    audio_data = []
+
+    # Slower, ambient feel
+    for i in range(num_samples):
+        t = i / sample_rate
+
+        # Ambient pad
+        pad = math.sin(2 * math.pi * 110 * t) * 0.2
+        pad += math.sin(2 * math.pi * 165 * t) * 0.1
+        pad += math.sin(2 * math.pi * 220 * t) * 0.1
+
+        # Slow modulation
+        mod = (math.sin(2 * math.pi * 0.5 * t) + 1) / 2
+        pad *= (0.5 + mod * 0.5)
+
+        sample = max(-0.9, min(0.9, pad))
+        audio_data.append(int(sample * 32767))
+
+    sound_buffer = io.BytesIO()
+    for sample in audio_data:
+        sound_buffer.write(struct.pack('<hh', sample, sample))
+
+    sound_buffer.seek(0)
+    sound = pygame.mixer.Sound(buffer=sound_buffer.getvalue())
+    return sound
+
+# Web version uses browser localStorage for persistent storage
+import json as json_module
+import platform
+
+# Check if running in browser (Pyodide/Pygbag)
+IS_BROWSER = platform.system() == 'Emscripten' or 'wasm' in platform.machine().lower()
+
+# Try to import browser storage module
+try:
+    from platform import window
+    HAS_LOCALSTORAGE = True
+except:
+    HAS_LOCALSTORAGE = False
+
+# Storage keys
+STORAGE_KEY_USERS = "arena_shooter_users"
+STORAGE_KEY_GUEST = "arena_shooter_guest"
+
+# Fallback in-memory storage
+web_save_data = {"coins": 0, "has_rpg": False, "has_shotgun": False, "medkit_charges": 0, "has_sniper": False}
+web_users = {}
+current_user = None
+
+
+def storage_get(key):
+    """Get data from localStorage"""
+    global HAS_LOCALSTORAGE
+    try:
+        if HAS_LOCALSTORAGE:
+            from platform import window
+            data = window.localStorage.getItem(key)
+            if data:
+                return json_module.loads(data)
+    except Exception as e:
+        print(f"Storage get error: {e}")
+    return None
+
+
+def storage_set(key, value):
+    """Set data in localStorage"""
+    global HAS_LOCALSTORAGE
+    try:
+        if HAS_LOCALSTORAGE:
+            from platform import window
+            window.localStorage.setItem(key, json_module.dumps(value))
+            return True
+    except Exception as e:
+        print(f"Storage set error: {e}")
+    return False
+
+
+def load_users():
+    """Load all user accounts from localStorage"""
+    global web_users
+    stored = storage_get(STORAGE_KEY_USERS)
+    if stored:
+        web_users = stored
+    return web_users
+
+
+def save_users_to_storage():
+    """Save all user accounts to localStorage"""
+    global web_users
+    storage_set(STORAGE_KEY_USERS, web_users)
+
+
+def register_user(username, passcode):
+    """Register a new user"""
+    global web_users
+    # Reload from storage first
+    load_users()
+
+    if username in web_users:
+        return False, "Username already exists"
+    if len(username) < 3:
+        return False, "Username too short (min 3 chars)"
+    if len(passcode) < 4:
+        return False, "Passcode too short (min 4 chars)"
+
+    web_users[username] = {
+        "passcode": passcode,
+        "coins": 0,
+        "has_rpg": False,
+        "has_shotgun": False,
+        "medkit_charges": 0,
+        "has_sniper": False
+    }
+    save_users_to_storage()
+    return True, "Account created!"
+
+
+def login_user(username, passcode):
+    """Login a user"""
+    global current_user, web_users
+    # Reload from storage first
+    load_users()
+
+    if username not in web_users:
+        return False, "Username not found"
+    if web_users[username]["passcode"] != passcode:
+        return False, "Wrong passcode"
+
+    current_user = username
+    return True, "Login successful!"
+
+
+def logout_user():
+    """Logout current user"""
+    global current_user
+    current_user = None
+
+
+def load_save():
+    """Load saved data for current user from localStorage"""
+    global current_user, web_users, web_save_data
+
+    if current_user:
+        # Reload users from storage
+        load_users()
+        if current_user in web_users:
+            data = web_users[current_user]
+            return (data.get("coins", 0), data.get("has_rpg", False),
+                    data.get("has_shotgun", False), data.get("medkit_charges", 0),
+                    data.get("has_sniper", False))
+
+    # Guest mode - try to load guest data from storage
+    guest_data = storage_get(STORAGE_KEY_GUEST)
+    if guest_data:
+        web_save_data = guest_data
+
+    return (web_save_data["coins"], web_save_data["has_rpg"],
+            web_save_data["has_shotgun"], web_save_data["medkit_charges"],
+            web_save_data["has_sniper"])
+
+
+def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper):
+    """Save data for current user to localStorage"""
+    global current_user, web_users, web_save_data
+
+    if current_user:
+        # Reload users first to avoid overwriting
+        load_users()
+        if current_user in web_users:
+            web_users[current_user]["coins"] = coins
+            web_users[current_user]["has_rpg"] = has_rpg
+            web_users[current_user]["has_shotgun"] = has_shotgun
+            web_users[current_user]["medkit_charges"] = medkit_charges
+            web_users[current_user]["has_sniper"] = has_sniper
+            save_users_to_storage()
+            return True
+
+    # Guest mode - save to guest storage
+    web_save_data["coins"] = coins
+    web_save_data["has_rpg"] = has_rpg
+    web_save_data["has_shotgun"] = has_shotgun
+    web_save_data["medkit_charges"] = medkit_charges
+    web_save_data["has_sniper"] = has_sniper
+    storage_set(STORAGE_KEY_GUEST, web_save_data)
+    return True
+
+
+# Initialize by loading users from storage at startup
+load_users()
+
+# Screen settings
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+
+# Map is much bigger than screen
+MAP_WIDTH = 5000
+MAP_HEIGHT = 5000
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (220, 60, 60)
+GREEN = (60, 200, 60)
+BLUE = (60, 120, 220)
+YELLOW = (220, 220, 60)
+ORANGE = (255, 140, 0)
+GRAY = (100, 100, 100)
+DARK_GRAY = (50, 50, 50)
+BROWN = (139, 90, 43)
+LIGHT_BLUE = (135, 206, 235)
+FLOOR_COLOR = (70, 75, 80)
+
+# Difficulty settings
+DIFFICULTY = {
+    "easy": {"count": 8, "health": 40, "speed": 2, "damage": 5, "fire_rate": 90, "color": GREEN, "points": 100, "coins": 1},
+    "medium": {"count": 15, "health": 60, "speed": 3, "damage": 10, "fire_rate": 60, "color": YELLOW, "points": 200, "coins": 3},
+    "hard": {"count": 25, "health": 100, "speed": 4, "damage": 15, "fire_rate": 40, "color": RED, "points": 300, "coins": 8},
+    "impossible": {"count": 10, "health": 120, "speed": 5, "damage": 20, "fire_rate": 30, "color": (150, 0, 150), "points": 500, "coins": 15, "waves": 5, "has_boss": True}
+}
+
+
+class Camera:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+
+    def update(self, target_x, target_y):
+        # Center camera on target
+        self.x = target_x - SCREEN_WIDTH // 2
+        self.y = target_y - SCREEN_HEIGHT // 2
+
+        # Keep camera in bounds
+        self.x = max(0, min(MAP_WIDTH - SCREEN_WIDTH, self.x))
+        self.y = max(0, min(MAP_HEIGHT - SCREEN_HEIGHT, self.y))
+
+    def apply(self, x, y):
+        return x - self.x, y - self.y
+
+
+class Bullet:
+    def __init__(self, x, y, angle, is_player=True, is_shotgun=False, weapon_type="Rifle"):
+        self.x = x
+        self.y = y
+        self.start_x = x  # Track starting position for shotgun damage calc
+        self.start_y = y
+        self.angle = angle
+        self.speed = 15 if is_player else 8
+        self.is_player = is_player
+        self.is_shotgun = is_shotgun
+        self.weapon_type = weapon_type
+        self.radius = 5
+        self.base_damage = 25 if is_player else 10
+        self.damage = self.base_damage
+        self.lifetime = 180
+        self.color = YELLOW if is_player else ORANGE
+
+        # Trail effect
+        self.trail = []
+        self.max_trail_length = 5
+
+    def update(self):
+        # Store position for trail
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > self.max_trail_length:
+            self.trail.pop(0)
+
+        self.x += math.cos(self.angle) * self.speed
+        self.y += math.sin(self.angle) * self.speed
+        self.lifetime -= 1
+
+        # Check bounds
+        if self.x < 0 or self.x > MAP_WIDTH or self.y < 0 or self.y > MAP_HEIGHT:
+            self.lifetime = 0
+
+    def get_damage(self):
+        """Get damage, accounting for shotgun distance falloff"""
+        if not self.is_shotgun:
+            return self.damage
+
+        # Calculate distance traveled
+        dist = math.sqrt((self.x - self.start_x)**2 + (self.y - self.start_y)**2)
+
+        # Shotgun: max damage up close (50), falls off with distance
+        # At 0 distance: 50 damage
+        # At 150+ distance: 10 damage (minimum)
+        max_effective_range = 150
+        if dist < max_effective_range:
+            # Linear falloff from base_damage to 10
+            damage_mult = 1 - (dist / max_effective_range) * 0.8
+            return int(self.base_damage * damage_mult)
+        else:
+            return 10  # Minimum damage at long range
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+        if -20 < sx < SCREEN_WIDTH + 20 and -20 < sy < SCREEN_HEIGHT + 20:
+            # Draw trail first (behind bullet)
+            if len(self.trail) > 1:
+                for i, (tx, ty) in enumerate(self.trail):
+                    tsx, tsy = camera.apply(tx, ty)
+                    alpha = (i + 1) / len(self.trail)
+                    trail_size = int(self.radius * 0.5 * alpha)
+                    if trail_size > 0:
+                        if self.weapon_type == "Sniper":
+                            # Sniper has a longer, thinner trail
+                            trail_color = (200, 220, 255)
+                        elif self.weapon_type == "Shotgun":
+                            # Shotgun pellets have orange trail
+                            trail_color = (255, 150, 50)
+                        elif self.weapon_type == "RPG":
+                            # RPG has smoke trail
+                            trail_color = (150, 150, 150)
+                        else:
+                            trail_color = (255, 200, 100)
+                        pygame.draw.circle(screen, trail_color, (int(tsx), int(tsy)), trail_size)
+
+            # Draw bullet based on weapon type
+            if self.weapon_type == "Rifle":
+                self._draw_rifle_bullet(screen, sx, sy)
+            elif self.weapon_type == "Handgun":
+                self._draw_handgun_bullet(screen, sx, sy)
+            elif self.weapon_type == "Shotgun":
+                self._draw_shotgun_pellet(screen, sx, sy)
+            elif self.weapon_type == "Sniper":
+                self._draw_sniper_bullet(screen, sx, sy)
+            elif self.weapon_type == "RPG":
+                self._draw_rpg_rocket(screen, sx, sy)
+            else:
+                # Enemy bullets or default
+                self._draw_enemy_bullet(screen, sx, sy)
+
+    def _draw_rifle_bullet(self, screen, sx, sy):
+        """Draw realistic rifle bullet - pointed brass casing"""
+        # Bullet body (brass colored, elongated)
+        bullet_length = 12
+        bullet_width = 4
+
+        # Calculate bullet tip and base
+        tip_x = sx + math.cos(self.angle) * (bullet_length / 2)
+        tip_y = sy + math.sin(self.angle) * (bullet_length / 2)
+        base_x = sx - math.cos(self.angle) * (bullet_length / 2)
+        base_y = sy - math.sin(self.angle) * (bullet_length / 2)
+
+        # Draw bullet body (brass)
+        pygame.draw.line(screen, (180, 140, 60), (base_x, base_y), (tip_x, tip_y), bullet_width)
+
+        # Draw copper tip
+        pygame.draw.line(screen, (200, 100, 50),
+                        (sx, sy), (tip_x, tip_y), bullet_width - 1)
+
+        # Highlight
+        pygame.draw.line(screen, (220, 180, 100),
+                        (base_x, base_y), (sx, sy), 2)
+
+    def _draw_handgun_bullet(self, screen, sx, sy):
+        """Draw smaller pistol bullet"""
+        bullet_length = 8
+        bullet_width = 3
+
+        tip_x = sx + math.cos(self.angle) * (bullet_length / 2)
+        tip_y = sy + math.sin(self.angle) * (bullet_length / 2)
+        base_x = sx - math.cos(self.angle) * (bullet_length / 2)
+        base_y = sy - math.sin(self.angle) * (bullet_length / 2)
+
+        # Brass casing
+        pygame.draw.line(screen, (180, 140, 60), (base_x, base_y), (tip_x, tip_y), bullet_width)
+        # Lead tip
+        pygame.draw.line(screen, (100, 100, 100), (sx, sy), (tip_x, tip_y), bullet_width - 1)
+
+    def _draw_shotgun_pellet(self, screen, sx, sy):
+        """Draw small round shotgun pellet"""
+        # Small lead pellet
+        pygame.draw.circle(screen, (80, 80, 80), (int(sx), int(sy)), 3)
+        pygame.draw.circle(screen, (120, 120, 120), (int(sx), int(sy)), 3, 1)
+        # Shine
+        pygame.draw.circle(screen, (150, 150, 150), (int(sx - 1), int(sy - 1)), 1)
+
+    def _draw_sniper_bullet(self, screen, sx, sy):
+        """Draw long sniper bullet with tracer effect"""
+        bullet_length = 18
+        bullet_width = 4
+
+        tip_x = sx + math.cos(self.angle) * (bullet_length / 2)
+        tip_y = sy + math.sin(self.angle) * (bullet_length / 2)
+        base_x = sx - math.cos(self.angle) * (bullet_length / 2)
+        base_y = sy - math.sin(self.angle) * (bullet_length / 2)
+
+        # Long brass casing
+        pygame.draw.line(screen, (180, 140, 60), (base_x, base_y), (tip_x, tip_y), bullet_width)
+
+        # Steel/copper tip
+        pygame.draw.line(screen, (150, 80, 40), (sx, sy), (tip_x, tip_y), bullet_width - 1)
+
+        # Tracer glow (cyan)
+        pygame.draw.line(screen, (100, 200, 255), (base_x, base_y), (sx, sy), 2)
+        pygame.draw.circle(screen, (150, 220, 255), (int(base_x), int(base_y)), 3)
+
+    def _draw_rpg_rocket(self, screen, sx, sy):
+        """Draw RPG rocket"""
+        rocket_length = 20
+        rocket_width = 6
+
+        tip_x = sx + math.cos(self.angle) * (rocket_length / 2)
+        tip_y = sy + math.sin(self.angle) * (rocket_length / 2)
+        base_x = sx - math.cos(self.angle) * (rocket_length / 2)
+        base_y = sy - math.sin(self.angle) * (rocket_length / 2)
+
+        # Rocket body (olive/gray)
+        pygame.draw.line(screen, (80, 90, 70), (base_x, base_y), (tip_x, tip_y), rocket_width)
+
+        # Warhead (darker tip)
+        pygame.draw.line(screen, (60, 60, 60), (sx, sy), (tip_x, tip_y), rocket_width - 1)
+
+        # Fins at the back
+        fin_angle1 = self.angle + math.pi/2
+        fin_angle2 = self.angle - math.pi/2
+        fin_length = 6
+        fin1_x = base_x + math.cos(fin_angle1) * fin_length
+        fin1_y = base_y + math.sin(fin_angle1) * fin_length
+        fin2_x = base_x + math.cos(fin_angle2) * fin_length
+        fin2_y = base_y + math.sin(fin_angle2) * fin_length
+        pygame.draw.line(screen, (60, 70, 50), (base_x, base_y), (fin1_x, fin1_y), 2)
+        pygame.draw.line(screen, (60, 70, 50), (base_x, base_y), (fin2_x, fin2_y), 2)
+
+        # Rocket flame at back
+        flame_x = base_x - math.cos(self.angle) * 8
+        flame_y = base_y - math.sin(self.angle) * 8
+        pygame.draw.line(screen, (255, 200, 50), (base_x, base_y), (flame_x, flame_y), 4)
+        pygame.draw.line(screen, (255, 100, 0), (base_x, base_y), (flame_x, flame_y), 2)
+
+    def _draw_enemy_bullet(self, screen, sx, sy):
+        """Draw enemy bullet - red/orange energy ball"""
+        # Outer glow
+        pygame.draw.circle(screen, (255, 100, 50), (int(sx), int(sy)), self.radius + 2)
+        # Inner core
+        pygame.draw.circle(screen, (255, 200, 100), (int(sx), int(sy)), self.radius)
+        # Hot center
+        pygame.draw.circle(screen, (255, 255, 200), (int(sx), int(sy)), self.radius - 2)
+
+
+class Grenade:
+    def __init__(self, x, y, angle):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.speed = 10
+        self.radius = 8
+        self.damage = 100
+        self.explosion_radius = 120
+        self.lifetime = 90  # Explodes after ~1.5 seconds (more time to roll)
+        self.color = (100, 80, 60)
+        self.exploded = False
+        self.roll_angle = 0  # For visual rolling effect
+
+    def update(self):
+        # Grenade rolls - slows down gradually like a ball
+        self.x += math.cos(self.angle) * self.speed
+        self.y += math.sin(self.angle) * self.speed
+
+        # Roll friction - slower deceleration for rolling effect
+        if self.speed > 0.5:
+            self.speed *= 0.98  # Gentler slowdown for rolling
+        else:
+            self.speed = 0  # Stop when very slow
+
+        # Update roll angle for visual effect
+        self.roll_angle += self.speed * 0.3
+
+        self.lifetime -= 1
+
+        # Keep in bounds and bounce off walls
+        if self.x < self.radius:
+            self.x = self.radius
+            self.angle = math.pi - self.angle
+            self.speed *= 0.7
+        elif self.x > MAP_WIDTH - self.radius:
+            self.x = MAP_WIDTH - self.radius
+            self.angle = math.pi - self.angle
+            self.speed *= 0.7
+        if self.y < self.radius:
+            self.y = self.radius
+            self.angle = -self.angle
+            self.speed *= 0.7
+        elif self.y > MAP_HEIGHT - self.radius:
+            self.y = MAP_HEIGHT - self.radius
+            self.angle = -self.angle
+            self.speed *= 0.7
+
+    def should_explode(self):
+        return self.lifetime <= 0 and not self.exploded
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Draw realistic grenade body (olive green)
+        pygame.draw.circle(screen, (60, 80, 60), (int(sx), int(sy)), self.radius)
+        pygame.draw.circle(screen, (80, 100, 80), (int(sx), int(sy)), self.radius, 2)
+
+        # Draw grenade segments (the textured lines)
+        for i in range(4):
+            seg_angle = self.roll_angle + i * (math.pi / 2)
+            seg_x1 = sx + math.cos(seg_angle) * 2
+            seg_y1 = sy + math.sin(seg_angle) * 2
+            seg_x2 = sx + math.cos(seg_angle) * (self.radius - 1)
+            seg_y2 = sy + math.sin(seg_angle) * (self.radius - 1)
+            pygame.draw.line(screen, (50, 70, 50), (seg_x1, seg_y1), (seg_x2, seg_y2), 1)
+
+        # Draw spoon/lever (flies off after throw but we keep it for visual)
+        spoon_angle = self.roll_angle + 0.5
+        spoon_x = sx + math.cos(spoon_angle) * (self.radius + 2)
+        spoon_y = sy + math.sin(spoon_angle) * (self.radius + 2)
+        spoon_end_x = spoon_x + math.cos(spoon_angle) * 6
+        spoon_end_y = spoon_y + math.sin(spoon_angle) * 6
+        pygame.draw.line(screen, (100, 100, 100), (spoon_x, spoon_y), (spoon_end_x, spoon_end_y), 2)
+
+        # Draw fuse/top cap
+        cap_x = sx + math.cos(self.roll_angle + math.pi) * (self.radius - 2)
+        cap_y = sy + math.sin(self.roll_angle + math.pi) * (self.radius - 2)
+        pygame.draw.circle(screen, (80, 80, 80), (int(cap_x), int(cap_y)), 3)
+
+        # Draw fuse spark (blinking, gets faster as it gets close to exploding)
+        blink_rate = 10 if self.lifetime > 30 else 5 if self.lifetime > 15 else 2
+        if self.lifetime % blink_rate < blink_rate // 2 + 1:
+            spark_x = cap_x + math.cos(self.roll_angle + math.pi) * 4
+            spark_y = cap_y + math.sin(self.roll_angle + math.pi) * 4
+            # Spark gets bigger and redder as it's about to explode
+            spark_size = 3 if self.lifetime > 30 else 4 if self.lifetime > 15 else 5
+            spark_color = ORANGE if self.lifetime > 30 else (255, 100, 0) if self.lifetime > 15 else RED
+            pygame.draw.circle(screen, spark_color, (int(spark_x), int(spark_y)), spark_size)
+            # Add glow effect when close to exploding
+            if self.lifetime < 20:
+                pygame.draw.circle(screen, (255, 200, 100), (int(spark_x), int(spark_y)), spark_size + 2, 1)
+
+
+class Explosion:
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.max_radius = radius
+        self.current_radius = 10
+        self.lifetime = 20
+        self.growing = True
+
+    def update(self):
+        if self.growing:
+            self.current_radius += 15
+            if self.current_radius >= self.max_radius:
+                self.growing = False
+        self.lifetime -= 1
+
+    def is_done(self):
+        return self.lifetime <= 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+        # Draw explosion rings
+        alpha = int(255 * (self.lifetime / 20))
+        for i in range(3):
+            r = max(0, self.current_radius - i * 20)
+            if r > 0:
+                color = (255, min(255, 100 + i * 50), 0)
+                pygame.draw.circle(screen, color, (int(sx), int(sy)), int(r), 4)
+        # Center flash
+        if self.lifetime > 15:
+            pygame.draw.circle(screen, WHITE, (int(sx), int(sy)), int(self.current_radius * 0.3))
+
+
+class HealingEffect:
+    """Visual effect when using a medkit"""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.lifetime = 60  # 1 second at 60fps
+        self.max_lifetime = 60
+        self.particles = []
+        self.ring_radius = 0
+        self.max_ring_radius = 50
+
+        # Create healing particles
+        for _ in range(20):
+            angle = random.uniform(0, math.pi * 2)
+            distance = random.uniform(20, 60)
+            speed = random.uniform(0.5, 1.5)
+            self.particles.append({
+                'angle': angle,
+                'distance': distance,
+                'speed': speed,
+                'size': random.randint(3, 6),
+                'offset': random.uniform(0, math.pi * 2)
+            })
+
+    def update(self, player_x, player_y):
+        """Update effect position to follow player"""
+        self.x = player_x
+        self.y = player_y
+        self.lifetime -= 1
+
+        # Expand ring
+        progress = 1 - (self.lifetime / self.max_lifetime)
+        self.ring_radius = self.max_ring_radius * progress
+
+        # Update particles (move towards center)
+        for p in self.particles:
+            p['distance'] -= p['speed']
+            if p['distance'] < 0:
+                p['distance'] = 0
+
+        return self.lifetime > 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+        progress = 1 - (self.lifetime / self.max_lifetime)
+
+        # Draw healing ring expanding outward
+        if self.ring_radius > 0:
+            ring_alpha = int(255 * (1 - progress))
+            # Green healing ring
+            pygame.draw.circle(screen, (50, 255, 100), (int(sx), int(sy)), int(self.ring_radius), 3)
+            # Inner ring
+            inner_radius = self.ring_radius * 0.7
+            if inner_radius > 5:
+                pygame.draw.circle(screen, (100, 255, 150), (int(sx), int(sy)), int(inner_radius), 2)
+
+        # Draw healing particles floating towards player
+        for p in self.particles:
+            if p['distance'] > 0:
+                # Particles spiral inward
+                wobble = math.sin(self.lifetime * 0.2 + p['offset']) * 5
+                px = sx + math.cos(p['angle']) * (p['distance'] + wobble)
+                py = sy + math.sin(p['angle']) * (p['distance'] + wobble)
+
+                # Green healing particle with glow
+                glow_size = p['size'] + 2
+                pygame.draw.circle(screen, (100, 255, 150), (int(px), int(py)), glow_size)
+                pygame.draw.circle(screen, (150, 255, 200), (int(px), int(py)), p['size'])
+                pygame.draw.circle(screen, (200, 255, 220), (int(px), int(py)), max(1, p['size'] - 2))
+
+        # Draw plus sign in center when healing
+        if self.lifetime > 30:
+            plus_size = 15
+            plus_width = 4
+            # Vertical line of plus
+            pygame.draw.line(screen, (50, 255, 100),
+                           (sx, sy - plus_size), (sx, sy + plus_size), plus_width)
+            # Horizontal line of plus
+            pygame.draw.line(screen, (50, 255, 100),
+                           (sx - plus_size, sy), (sx + plus_size, sy), plus_width)
+            # White center
+            pygame.draw.line(screen, (200, 255, 220),
+                           (sx, sy - plus_size + 2), (sx, sy + plus_size - 2), 2)
+            pygame.draw.line(screen, (200, 255, 220),
+                           (sx - plus_size + 2, sy), (sx + plus_size - 2, sy), 2)
+
+        # Draw health restore text floating up
+        if self.lifetime > 40:
+            text_y_offset = (self.max_lifetime - self.lifetime) * 0.5
+            font = pygame.font.Font(None, 28)
+            heal_text = font.render("+HEAL", True, (100, 255, 150))
+            screen.blit(heal_text, (sx - heal_text.get_width()//2, sy - 50 - text_y_offset))
+
+
+class Robot:
+    def __init__(self, x, y, difficulty, knife_only=False):
+        self.x = x
+        self.y = y
+        self.settings = DIFFICULTY[difficulty]
+        self.health = self.settings["health"]
+        self.max_health = self.settings["health"]
+        self.speed = self.settings["speed"]
+        # Knife-only bots are slightly faster to chase player
+        if knife_only:
+            self.speed = self.speed * 1.2
+        self.color = self.settings["color"]
+        self.fire_cooldown = 0
+        self.fire_rate = self.settings["fire_rate"]
+        self.radius = 20
+        self.angle = 0
+        self.difficulty = difficulty
+        self.state = "patrol"
+        self.patrol_target = self.get_patrol_target()
+        self.hit_flash = 0
+        self.knife_cooldown = 0
+        self.knife_damage = 15
+        self.knife_range = 50
+        self.knife_only = knife_only  # If True, this robot only uses knife
+
+    def get_patrol_target(self):
+        margin = 100
+        return (
+            random.randint(margin, MAP_WIDTH - margin),
+            random.randint(margin, MAP_HEIGHT - margin)
+        )
+
+    def update(self, player_x, player_y, obstacles):
+        # Distance to player
+        dx = player_x - self.x
+        dy = player_y - self.y
+        dist = math.sqrt(dx*dx + dy*dy)
+
+        # State machine - knife bots have longer detection range
+        detect_range = 600 if self.knife_only else 400
+        attack_range = 300
+
+        if dist < detect_range:
+            self.state = "chase"
+            if dist < attack_range:
+                self.state = "attack"
+        else:
+            self.state = "patrol"
+
+        # Movement
+        if self.state == "patrol":
+            tx, ty = self.patrol_target
+            dx = tx - self.x
+            dy = ty - self.y
+            dist_to_target = math.sqrt(dx*dx + dy*dy)
+
+            if dist_to_target < 50:
+                self.patrol_target = self.get_patrol_target()
+            elif dist_to_target > 0:
+                self.x += (dx / dist_to_target) * self.speed * 0.5
+                self.y += (dy / dist_to_target) * self.speed * 0.5
+                self.angle = math.atan2(dy, dx)
+
+        elif self.state == "chase":
+            # Recalculate dx/dy for player direction
+            dx = player_x - self.x
+            dy = player_y - self.y
+            if dist > 0:
+                self.x += (dx / dist) * self.speed
+                self.y += (dy / dist) * self.speed
+            self.angle = math.atan2(dy, dx)
+
+        elif self.state == "attack":
+            # Recalculate dx/dy for player direction
+            dx = player_x - self.x
+            dy = player_y - self.y
+            self.angle = math.atan2(dy, dx)
+            # Knife bots keep chasing even in attack state
+            if self.knife_only and dist > self.knife_range:
+                if dist > 0:
+                    self.x += (dx / dist) * self.speed
+                    self.y += (dy / dist) * self.speed
+
+        # Keep in bounds
+        self.x = max(self.radius + 50, min(MAP_WIDTH - self.radius - 50, self.x))
+        self.y = max(self.radius + 50, min(MAP_HEIGHT - self.radius - 50, self.y))
+
+        # Check obstacle collision
+        for obs in obstacles:
+            if obs.collides_circle(self.x, self.y, self.radius):
+                # Push out of obstacle
+                ox = obs.x + obs.width / 2
+                oy = obs.y + obs.height / 2
+                push_x = self.x - ox
+                push_y = self.y - oy
+                push_dist = math.sqrt(push_x*push_x + push_y*push_y)
+                if push_dist > 0:
+                    self.x += (push_x / push_dist) * 5
+                    self.y += (push_y / push_dist) * 5
+
+        # Fire cooldown
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= 1
+
+        # Knife cooldown
+        if self.knife_cooldown > 0:
+            self.knife_cooldown -= 1
+
+        # Hit flash
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
+
+    def can_knife(self, player_x, player_y):
+        """Check if robot can use knife attack"""
+        # Gun bots cannot use knife
+        if not self.knife_only:
+            return False
+        if self.knife_cooldown > 0:
+            return False
+        dx = player_x - self.x
+        dy = player_y - self.y
+        dist = math.sqrt(dx*dx + dy*dy)
+        return dist < self.knife_range
+
+    def knife_attack(self):
+        """Perform knife attack"""
+        self.knife_cooldown = 30  # Cooldown for knife
+        return self.knife_damage
+
+    def can_shoot(self):
+        # Knife-only bots cannot shoot
+        if self.knife_only:
+            return False
+        return self.fire_cooldown <= 0 and self.state == "attack"
+
+    def shoot(self, player_x, player_y):
+        self.fire_cooldown = self.fire_rate
+
+        # Add inaccuracy
+        accuracy = 0.3 if self.difficulty == "easy" else 0.15 if self.difficulty == "medium" else 0.08
+        angle = self.angle + random.uniform(-accuracy, accuracy)
+
+        return Bullet(self.x, self.y, angle, False, False, "Enemy")
+
+    def take_damage(self, damage):
+        self.health -= damage
+        self.hit_flash = 10
+        return self.health <= 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Only draw if on screen
+        if -50 < sx < SCREEN_WIDTH + 50 and -50 < sy < SCREEN_HEIGHT + 50:
+            # Body color (flash white when hit)
+            body_color = WHITE if self.hit_flash > 0 else self.color
+
+            # Draw body
+            pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
+            pygame.draw.circle(screen, DARK_GRAY, (int(sx), int(sy)), self.radius, 2)
+
+            # Draw two red eyes
+            eye_offset = 6  # Distance between eyes
+            eye_dist = 8  # Distance from center
+
+            # Left eye
+            left_eye_angle = self.angle + 0.4
+            left_eye_x = sx + math.cos(left_eye_angle) * eye_dist
+            left_eye_y = sy + math.sin(left_eye_angle) * eye_dist
+            pygame.draw.circle(screen, RED, (int(left_eye_x), int(left_eye_y)), 4)
+            pygame.draw.circle(screen, (150, 0, 0), (int(left_eye_x), int(left_eye_y)), 2)
+
+            # Right eye
+            right_eye_angle = self.angle - 0.4
+            right_eye_x = sx + math.cos(right_eye_angle) * eye_dist
+            right_eye_y = sy + math.sin(right_eye_angle) * eye_dist
+            pygame.draw.circle(screen, RED, (int(right_eye_x), int(right_eye_y)), 4)
+            pygame.draw.circle(screen, (150, 0, 0), (int(right_eye_x), int(right_eye_y)), 2)
+
+            # Draw weapon (knife or gun)
+            if self.knife_only:
+                # Draw knife - shorter and silver colored
+                knife_length = self.radius + 8
+                knife_x = sx + math.cos(self.angle) * knife_length
+                knife_y = sy + math.sin(self.angle) * knife_length
+                pygame.draw.line(screen, (192, 192, 192), (sx, sy), (knife_x, knife_y), 3)
+                # Draw knife tip
+                tip_x = sx + math.cos(self.angle) * (knife_length + 4)
+                tip_y = sy + math.sin(self.angle) * (knife_length + 4)
+                pygame.draw.line(screen, WHITE, (knife_x, knife_y), (tip_x, tip_y), 2)
+            else:
+                # Draw gun
+                gun_length = self.radius + 10
+                gun_x = sx + math.cos(self.angle) * gun_length
+                gun_y = sy + math.sin(self.angle) * gun_length
+                pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 6)
+
+            # Health bar
+            bar_width = 40
+            bar_height = 6
+            bar_x = sx - bar_width // 2
+            bar_y = sy - self.radius - 15
+
+            pygame.draw.rect(screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
+            health_width = int((self.health / self.max_health) * bar_width)
+            health_color = GREEN if self.health > self.max_health * 0.5 else YELLOW if self.health > self.max_health * 0.25 else RED
+            pygame.draw.rect(screen, health_color, (bar_x, bar_y, health_width, bar_height))
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+
+
+class Boss:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.health = 1000
+        self.max_health = 1000
+        self.speed = 2
+        self.radius = 50  # Much bigger than normal robots
+        self.angle = 0
+        self.fire_cooldown = 0
+        self.fire_rate = 20  # Faster shooting
+        self.hit_flash = 0
+        self.attack_pattern = 0
+        self.pattern_timer = 0
+        self.charge_speed = 8
+        self.is_charging = False
+        self.charge_target = None
+
+    def update(self, player_x, player_y, obstacles):
+        dx = player_x - self.x
+        dy = player_y - self.y
+        dist = math.sqrt(dx*dx + dy*dy)
+        self.angle = math.atan2(dy, dx)
+
+        # Pattern switching
+        self.pattern_timer += 1
+        if self.pattern_timer > 180:  # Switch pattern every 3 seconds
+            self.pattern_timer = 0
+            self.attack_pattern = (self.attack_pattern + 1) % 3
+            self.is_charging = False
+
+        # Movement based on attack pattern
+        if self.attack_pattern == 0:
+            # Chase player slowly
+            if dist > 100:
+                self.x += (dx / dist) * self.speed
+                self.y += (dy / dist) * self.speed
+        elif self.attack_pattern == 1:
+            # Charge attack
+            if not self.is_charging and self.pattern_timer == 1:
+                self.is_charging = True
+                self.charge_target = (player_x, player_y)
+            if self.is_charging and self.charge_target:
+                cdx = self.charge_target[0] - self.x
+                cdy = self.charge_target[1] - self.y
+                cdist = math.sqrt(cdx*cdx + cdy*cdy)
+                if cdist > 20:
+                    self.x += (cdx / cdist) * self.charge_speed
+                    self.y += (cdy / cdist) * self.charge_speed
+                else:
+                    self.is_charging = False
+        elif self.attack_pattern == 2:
+            # Circle strafe
+            strafe_angle = self.angle + math.pi / 2
+            self.x += math.cos(strafe_angle) * self.speed * 1.5
+            self.y += math.sin(strafe_angle) * self.speed * 1.5
+
+        # Keep in bounds
+        self.x = max(self.radius + 50, min(MAP_WIDTH - self.radius - 50, self.x))
+        self.y = max(self.radius + 50, min(MAP_HEIGHT - self.radius - 50, self.y))
+
+        # Cooldowns
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= 1
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
+
+    def can_shoot(self):
+        return self.fire_cooldown <= 0
+
+    def shoot(self, player_x, player_y):
+        self.fire_cooldown = self.fire_rate
+        bullets = []
+
+        # Boss shoots multiple bullets in a spread
+        spread = 5
+        for i in range(spread):
+            angle_offset = (i - spread // 2) * 0.15
+            angle = self.angle + angle_offset
+            bullet = Bullet(self.x, self.y, angle, False, False, "Enemy")
+            bullet.damage = 15
+            bullet.speed = 10
+            bullets.append(bullet)
+
+        return bullets
+
+    def take_damage(self, damage):
+        self.health -= damage
+        self.hit_flash = 10
+        return self.health <= 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        if -100 < sx < SCREEN_WIDTH + 100 and -100 < sy < SCREEN_HEIGHT + 100:
+            # Body color (flash white when hit)
+            body_color = WHITE if self.hit_flash > 0 else (150, 0, 150)
+
+            # Draw body - bigger circle with outline
+            pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
+            pygame.draw.circle(screen, (100, 0, 100), (int(sx), int(sy)), self.radius, 4)
+
+            # Draw evil eyes
+            eye_offset = 15
+            for ex in [-1, 1]:
+                eye_x = sx + ex * eye_offset + math.cos(self.angle) * 10
+                eye_y = sy + math.sin(self.angle) * 10
+                pygame.draw.circle(screen, RED, (int(eye_x), int(eye_y)), 10)
+                pygame.draw.circle(screen, BLACK, (int(eye_x), int(eye_y)), 5)
+
+            # Draw gun (bigger)
+            gun_length = self.radius + 20
+            gun_x = sx + math.cos(self.angle) * gun_length
+            gun_y = sy + math.sin(self.angle) * gun_length
+            pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 12)
+
+            # Health bar (bigger, at top of screen when boss is active)
+            bar_width = 400
+            bar_height = 20
+            bar_x = SCREEN_WIDTH // 2 - bar_width // 2
+            bar_y = 50
+
+            pygame.draw.rect(screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
+            health_width = int((self.health / self.max_health) * bar_width)
+            pygame.draw.rect(screen, (150, 0, 150), (bar_x, bar_y, health_width, bar_height))
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
+
+            # Boss name
+            font = pygame.font.Font(None, 36)
+            boss_text = font.render("BOSS", True, (150, 0, 150))
+            screen.blit(boss_text, (SCREEN_WIDTH // 2 - boss_text.get_width() // 2, 25))
+
+
+class Obstacle:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = BROWN
+
+    def collides_circle(self, cx, cy, radius):
+        # Find closest point on rectangle to circle
+        closest_x = max(self.x, min(cx, self.x + self.width))
+        closest_y = max(self.y, min(cy, self.y + self.height))
+
+        dx = cx - closest_x
+        dy = cy - closest_y
+        return (dx * dx + dy * dy) < (radius * radius)
+
+    def collides_point(self, px, py):
+        return self.x <= px <= self.x + self.width and self.y <= py <= self.y + self.height
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Only draw if on screen
+        if sx + self.width > 0 and sx < SCREEN_WIDTH and sy + self.height > 0 and sy < SCREEN_HEIGHT:
+            pygame.draw.rect(screen, self.color, (sx, sy, self.width, self.height))
+            pygame.draw.rect(screen, DARK_GRAY, (sx, sy, self.width, self.height), 3)
+
+
+class ShellCasing:
+    """Ejected shell casing particle"""
+    def __init__(self, x, y, angle):
+        self.x = x
+        self.y = y
+        # Eject to the right of the gun
+        eject_angle = angle + math.pi / 2 + random.uniform(-0.3, 0.3)
+        speed = random.uniform(3, 6)
+        self.vx = math.cos(eject_angle) * speed
+        self.vy = math.sin(eject_angle) * speed
+        self.rotation = random.uniform(0, math.pi * 2)
+        self.rot_speed = random.uniform(-0.5, 0.5)
+        self.life = 60  # frames
+        self.size = random.uniform(3, 5)
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.92  # friction
+        self.vy *= 0.92
+        self.vy += 0.15  # gravity
+        self.rotation += self.rot_speed
+        self.life -= 1
+        return self.life > 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+        # Draw brass colored shell
+        alpha = min(255, self.life * 8)
+        color = (200, 160, 60)
+        # Draw as small rectangle
+        points = []
+        for i in range(4):
+            angle = self.rotation + i * math.pi / 2
+            px = sx + math.cos(angle) * self.size
+            py = sy + math.sin(angle) * self.size * 0.4
+            points.append((px, py))
+        if len(points) >= 3:
+            pygame.draw.polygon(screen, color, points)
+
+
+class MuzzleFlash:
+    """Muzzle flash effect"""
+    def __init__(self, x, y, angle, size=1.0):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.life = 4  # Very short
+        self.size = size
+
+    def update(self):
+        self.life -= 1
+        return self.life > 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+        # Draw flash as bright yellow/orange burst
+        flash_length = 20 * self.size * (self.life / 4)
+        flash_width = 12 * self.size * (self.life / 4)
+
+        # Main flash
+        end_x = sx + math.cos(self.angle) * flash_length
+        end_y = sy + math.sin(self.angle) * flash_length
+
+        # Draw multiple layers for glow effect
+        for i in range(3):
+            width = int(flash_width * (1 - i * 0.3))
+            if i == 0:
+                color = (255, 255, 200)  # White center
+            elif i == 1:
+                color = (255, 200, 50)   # Yellow
+            else:
+                color = (255, 100, 0)    # Orange edge
+            pygame.draw.line(screen, color, (sx, sy), (end_x, end_y), max(1, width))
+
+        # Side sparks
+        for i in range(3):
+            spark_angle = self.angle + random.uniform(-0.5, 0.5)
+            spark_len = flash_length * random.uniform(0.3, 0.7)
+            spark_x = sx + math.cos(spark_angle) * spark_len
+            spark_y = sy + math.sin(spark_angle) * spark_len
+            pygame.draw.line(screen, (255, 200, 100), (sx, sy), (spark_x, spark_y), 2)
+
+
+class Player:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 18
+        self.speed = 5
+        self.angle = 0
+        self.health = 100
+        self.max_health = 100
+        self.hit_flash = 0
+        self.fire_cooldown = 0
+
+        # Recoil system
+        self.recoil = 0  # Current recoil offset
+        self.recoil_recovery = 0.85  # How fast recoil recovers
+
+        # Reload animation system
+        self.reloading = False
+        self.reload_timer = 0
+        self.reload_duration = 60  # frames (1 second at 60fps)
+        self.reload_phase = 0  # 0-1 progress through reload
+
+        # Weapon system
+        self.current_weapon = 0  # 0 = rifle, 1 = pistol, 2 = rpg (if unlocked)
+        self.weapons = [
+            {"name": "Rifle", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 10, "damage": 25, "bullet_speed": 15, "color": YELLOW, "gun_length": 12, "gun_width": 6, "melee": False, "grenade": False},
+            {"name": "Handgun", "ammo": 40, "max_ammo": 40, "reloads": 4, "fire_rate": 5, "damage": 10, "bullet_speed": 18, "color": (255, 200, 100), "gun_length": 8, "gun_width": 4, "melee": False, "grenade": False},
+            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20, "damage": 30, "bullet_speed": 0, "color": WHITE, "gun_length": 10, "gun_width": 3, "melee": True, "grenade": False},
+            {"name": "Grenade", "ammo": 10, "max_ammo": 10, "reloads": 0, "fire_rate": 45, "damage": 100, "bullet_speed": 0, "color": (100, 80, 60), "gun_length": 6, "gun_width": 6, "melee": False, "grenade": True, "no_reload": True}
+        ]
+
+        # Load saved coins and unlocked weapons
+        saved_coins, saved_rpg, saved_shotgun, saved_medkit_charges, saved_sniper = load_save()
+        self.coins = saved_coins
+        self.has_rpg = saved_rpg
+        self.has_shotgun = saved_shotgun
+        self.has_sniper = saved_sniper
+        self.medkit_charges = saved_medkit_charges  # Number of heals available
+
+        # If Shotgun was unlocked, add it to weapons
+        if self.has_shotgun:
+            self.weapons.append({
+                "name": "Shotgun",
+                "ammo": 30,
+                "max_ammo": 30,
+                "reloads": 3,
+                "fire_rate": 30,
+                "damage": 50,  # Base damage, modified by distance
+                "bullet_speed": 12,
+                "color": ORANGE,
+                "gun_length": 14,
+                "gun_width": 7,
+                "melee": False,
+                "grenade": False,
+                "shotgun": True
+            })
+
+        # If RPG was unlocked, add it to weapons
+        if self.has_rpg:
+            self.weapons.append({
+                "name": "RPG",
+                "ammo": 5,
+                "max_ammo": 5,
+                "reloads": 2,
+                "fire_rate": 60,
+                "damage": 50,
+                "bullet_speed": 10,
+                "color": RED,
+                "gun_length": 18,
+                "gun_width": 8
+            })
+
+        # If Sniper was unlocked, add it to weapons
+        if self.has_sniper:
+            self.weapons.append({
+                "name": "Sniper",
+                "ammo": 5,
+                "max_ammo": 5,
+                "reloads": 3,
+                "fire_rate": 60,
+                "damage": 150,
+                "bullet_speed": 30,
+                "color": (0, 255, 255),
+                "gun_length": 20,
+                "gun_width": 4,
+                "melee": False,
+                "grenade": False
+            })
+
+    @property
+    def weapon(self):
+        return self.weapons[self.current_weapon]
+
+    @property
+    def ammo(self):
+        return self.weapon["ammo"]
+
+    @ammo.setter
+    def ammo(self, value):
+        self.weapon["ammo"] = value
+
+    @property
+    def max_ammo(self):
+        return self.weapon["max_ammo"]
+
+    def switch_weapon(self):
+        self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
+        self.fire_cooldown = 15  # Small delay when switching
+
+    def unlock_shotgun(self):
+        if not self.has_shotgun and self.coins >= 10:
+            self.coins -= 10
+            self.has_shotgun = True
+            # Add Shotgun to weapons
+            self.weapons.append({
+                "name": "Shotgun",
+                "ammo": 30,
+                "max_ammo": 30,
+                "reloads": 3,
+                "fire_rate": 30,
+                "damage": 50,  # Base damage, modified by distance
+                "bullet_speed": 12,
+                "color": ORANGE,
+                "gun_length": 14,
+                "gun_width": 7,
+                "melee": False,
+                "grenade": False,
+                "shotgun": True
+            })
+            # Auto-save after buying Shotgun
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_rpg(self):
+        if not self.has_rpg and self.coins >= 50:
+            self.coins -= 50
+            self.has_rpg = True
+            # Add RPG to weapons
+            self.weapons.append({
+                "name": "RPG",
+                "ammo": 5,
+                "max_ammo": 5,
+                "reloads": 2,
+                "fire_rate": 60,  # Very slow
+                "damage": 50,
+                "bullet_speed": 10,
+                "color": RED,
+                "gun_length": 18,
+                "gun_width": 8
+            })
+            # Auto-save after buying RPG
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_sniper(self):
+        if not self.has_sniper and self.coins >= 150:
+            self.coins -= 100
+            self.has_sniper = True
+            # Add Sniper to weapons
+            self.weapons.append({
+                "name": "Sniper",
+                "ammo": 5,
+                "max_ammo": 5,
+                "reloads": 3,
+                "fire_rate": 60,
+                "damage": 150,
+                "bullet_speed": 30,
+                "color": (0, 255, 255),
+                "gun_length": 20,
+                "gun_width": 4,
+                "melee": False,
+                "grenade": False
+            })
+            # Auto-save after buying Sniper
+            self.save_progress()
+            return True
+        return False
+
+    def add_coin(self, amount=1):
+        self.coins += amount
+        self.save_progress()  # Auto-save when coins are added
+
+    def save_progress(self):
+        """Save coins and weapon unlocks"""
+        return save_game(self.coins, self.has_rpg, self.has_shotgun, self.medkit_charges, self.has_sniper)
+
+    def use_medkit(self):
+        """Use a medkit charge to heal to full HP"""
+        if self.medkit_charges > 0 and self.health < self.max_health:
+            self.medkit_charges -= 1
+            self.health = self.max_health
+            self.save_progress()
+            return True
+        return False
+
+    def update(self, keys, mouse_pos, camera, obstacles):
+        # Movement (WASD and Arrow keys)
+        dx, dy = 0, 0
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            dy -= self.speed
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            dy += self.speed
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            dx -= self.speed
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            dx += self.speed
+
+        # Normalize diagonal
+        if dx != 0 and dy != 0:
+            dx *= 0.707
+            dy *= 0.707
+
+        # Try to move
+        new_x = self.x + dx
+        new_y = self.y + dy
+
+        # Check obstacle collision
+        can_move_x = True
+        can_move_y = True
+
+        for obs in obstacles:
+            if obs.collides_circle(new_x, self.y, self.radius):
+                can_move_x = False
+            if obs.collides_circle(self.x, new_y, self.radius):
+                can_move_y = False
+
+        if can_move_x:
+            self.x = max(self.radius + 50, min(MAP_WIDTH - self.radius - 50, new_x))
+        if can_move_y:
+            self.y = max(self.radius + 50, min(MAP_HEIGHT - self.radius - 50, new_y))
+
+        # Aim at mouse (convert screen mouse to world position)
+        world_mouse_x = mouse_pos[0] + camera.x
+        world_mouse_y = mouse_pos[1] + camera.y
+        self.angle = math.atan2(world_mouse_y - self.y, world_mouse_x - self.x)
+
+        # Cooldowns
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= 1
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
+
+    def shoot(self):
+        if self.fire_cooldown > 0:
+            return None
+
+        # Can't shoot while reloading
+        if self.reloading:
+            return None
+
+        # Knife doesn't use ammo
+        if not self.weapon.get("melee", False):
+            if self.ammo <= 0:
+                return None
+            self.ammo -= 1
+
+        self.fire_cooldown = self.weapon["fire_rate"]
+
+        # Melee weapon (knife) - return special melee attack
+        if self.weapon.get("melee", False):
+            return {"melee": True, "damage": self.weapon["damage"], "x": self.x, "y": self.y, "angle": self.angle}
+
+        # Grenade - return grenade data
+        if self.weapon.get("grenade", False):
+            return {
+                "grenade": True,
+                "x": self.x + math.cos(self.angle) * (self.radius + 10),
+                "y": self.y + math.sin(self.angle) * (self.radius + 10),
+                "angle": self.angle
+            }
+
+        is_shotgun = self.weapon.get("shotgun", False)
+        weapon_name = self.weapon["name"]
+        bullet = Bullet(
+            self.x + math.cos(self.angle) * (self.radius + 10),
+            self.y + math.sin(self.angle) * (self.radius + 10),
+            self.angle,
+            True,
+            is_shotgun,
+            weapon_name
+        )
+        bullet.speed = self.weapon["bullet_speed"]
+        bullet.base_damage = self.weapon["damage"]
+        bullet.damage = self.weapon["damage"]
+        bullet.color = self.weapon["color"]
+        return bullet
+
+    def take_damage(self, damage):
+        self.health -= damage
+        self.hit_flash = 10
+        return self.health <= 0
+
+    def update_recoil(self):
+        """Update recoil recovery"""
+        self.recoil *= self.recoil_recovery
+        if self.recoil < 0.1:
+            self.recoil = 0
+
+    def apply_recoil(self, amount):
+        """Apply recoil when shooting"""
+        self.recoil = min(self.recoil + amount, 15)  # Cap recoil
+
+    def start_reload(self):
+        """Start the reload animation"""
+        if not self.reloading and not self.weapon.get("no_reload", False):
+            reloads = self.weapon.get("reloads", 0)
+            if reloads > 0 and self.ammo < self.max_ammo:
+                self.reloading = True
+                self.reload_timer = self.reload_duration
+                self.reload_phase = 0
+                return True
+        return False
+
+    def update_reload(self):
+        """Update reload animation"""
+        if self.reloading:
+            self.reload_timer -= 1
+            self.reload_phase = 1 - (self.reload_timer / self.reload_duration)
+
+            # Reload complete
+            if self.reload_timer <= 0:
+                self.reloading = False
+                self.reload_phase = 0
+                self.weapon["reloads"] -= 1
+                self.ammo = self.max_ammo
+                return True  # Reload finished
+        return False
+
+    def get_reload_animation_offset(self):
+        """Get the gun offset/rotation for reload animation"""
+        if not self.reloading:
+            return 0, 0, 0  # No offset
+
+        phase = self.reload_phase
+        weapon_name = self.weapon["name"]
+
+        # Different animations for different weapons
+        if weapon_name == "Rifle":
+            # Rifle: tilt down, eject mag, insert new mag, tilt back up
+            if phase < 0.3:
+                # Tilt gun down
+                tilt = (phase / 0.3) * 0.8
+                offset_y = (phase / 0.3) * 10
+                return 0, offset_y, tilt
+            elif phase < 0.5:
+                # Magazine out (gun stays tilted)
+                return 0, 10, 0.8
+            elif phase < 0.8:
+                # Magazine in
+                return 0, 10, 0.8
+            else:
+                # Tilt back up
+                progress = (phase - 0.8) / 0.2
+                tilt = 0.8 * (1 - progress)
+                offset_y = 10 * (1 - progress)
+                return 0, offset_y, tilt
+
+        elif weapon_name == "Handgun":
+            # Pistol: slide back animation
+            if phase < 0.3:
+                # Pull slide back
+                offset_x = -(phase / 0.3) * 8
+                return offset_x, 0, 0
+            elif phase < 0.5:
+                # Eject mag
+                return -8, 5, 0.3
+            elif phase < 0.7:
+                # Insert mag
+                return -8, 5, 0.3
+            else:
+                # Release slide
+                progress = (phase - 0.7) / 0.3
+                offset_x = -8 * (1 - progress)
+                offset_y = 5 * (1 - progress)
+                tilt = 0.3 * (1 - progress)
+                return offset_x, offset_y, tilt
+
+        elif weapon_name == "Shotgun":
+            # Shotgun: pump action
+            if phase < 0.4:
+                # Pull pump back
+                offset_x = -(phase / 0.4) * 12
+                return offset_x, 0, 0
+            elif phase < 0.6:
+                # Hold
+                return -12, 0, 0
+            else:
+                # Push pump forward
+                progress = (phase - 0.6) / 0.4
+                offset_x = -12 * (1 - progress)
+                return offset_x, 0, 0
+
+        elif weapon_name == "Sniper":
+            # Sniper: bolt action
+            if phase < 0.25:
+                # Lift bolt
+                tilt = (phase / 0.25) * 0.5
+                return 0, 0, tilt
+            elif phase < 0.5:
+                # Pull bolt back
+                progress = (phase - 0.25) / 0.25
+                offset_x = -progress * 10
+                return offset_x, 0, 0.5
+            elif phase < 0.75:
+                # Push bolt forward
+                progress = (phase - 0.5) / 0.25
+                offset_x = -10 * (1 - progress)
+                return offset_x, 0, 0.5
+            else:
+                # Lower bolt
+                progress = (phase - 0.75) / 0.25
+                tilt = 0.5 * (1 - progress)
+                return 0, 0, tilt
+
+        elif weapon_name == "RPG":
+            # RPG: open tube, insert rocket
+            if phase < 0.3:
+                # Lower launcher
+                offset_y = (phase / 0.3) * 15
+                tilt = (phase / 0.3) * 0.6
+                return 0, offset_y, tilt
+            elif phase < 0.7:
+                # Insert rocket
+                return 0, 15, 0.6
+            else:
+                # Raise launcher
+                progress = (phase - 0.7) / 0.3
+                offset_y = 15 * (1 - progress)
+                tilt = 0.6 * (1 - progress)
+                return 0, offset_y, tilt
+
+        return 0, 0, 0
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Body (flash white when hit)
+        body_color = WHITE if self.hit_flash > 0 else BLUE
+        pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
+        pygame.draw.circle(screen, WHITE, (int(sx), int(sy)), self.radius, 2)
+
+        # Calculate recoil offset (gun pulls back when shooting)
+        recoil_offset = self.recoil
+
+        # Get reload animation offsets
+        reload_offset_x, reload_offset_y, reload_tilt = self.get_reload_animation_offset()
+
+        # Draw realistic gun based on weapon type
+        weapon_name = self.weapon["name"]
+
+        if weapon_name == "Rifle":
+            self.draw_rifle(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Handgun":
+            self.draw_handgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Knife":
+            self.draw_knife(screen, sx, sy)
+        elif weapon_name == "Grenade":
+            self.draw_grenade_weapon(screen, sx, sy)
+        elif weapon_name == "Shotgun":
+            self.draw_shotgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "RPG":
+            self.draw_rpg(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Sniper":
+            self.draw_sniper(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        else:
+            # Fallback to simple gun
+            gun_length = self.radius + self.weapon["gun_length"] - recoil_offset
+            gun_x = sx + math.cos(self.angle) * gun_length
+            gun_y = sy + math.sin(self.angle) * gun_length
+            pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 6)
+
+        # Draw reload indicator if reloading
+        if self.reloading:
+            # Draw reload progress bar above player
+            bar_width = 40
+            bar_height = 6
+            bar_x = sx - bar_width // 2
+            bar_y = sy - self.radius - 20
+            # Background
+            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            # Progress
+            progress_width = int(bar_width * self.reload_phase)
+            pygame.draw.rect(screen, (100, 200, 255), (bar_x, bar_y, progress_width, bar_height))
+            # Border
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+
+    def draw_rifle(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
+        """Draw realistic assault rifle"""
+        angle = self.angle + reload_tilt
+        # Start gun from edge of player body, with reload offset
+        gun_start_x = sx + math.cos(self.angle) * self.radius + reload_x
+        gun_start_y = sy + math.sin(self.angle) * self.radius + reload_y
+
+        # Barrel extends from body edge
+        barrel_length = 25 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+
+        # Main barrel (dark gray)
+        pygame.draw.line(screen, (40, 40, 40),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 6)
+
+        # Barrel highlight
+        pygame.draw.line(screen, (80, 80, 80),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 3)
+
+        # Body/receiver (slightly offset down, starts at body edge)
+        body_offset_angle = angle + 0.2
+        body_start_x = sx + math.cos(self.angle + 0.2) * self.radius + reload_x
+        body_start_y = sy + math.sin(self.angle + 0.2) * self.radius + reload_y
+        body_length = 15 - recoil
+        body_end_x = body_start_x + math.cos(body_offset_angle) * body_length
+        body_end_y = body_start_y + math.sin(body_offset_angle) * body_length
+        pygame.draw.line(screen, (50, 50, 55),
+                        (body_start_x, body_start_y),
+                        (body_end_x, body_end_y), 10)
+
+        # Magazine (animate during reload)
+        mag_offset = 0
+        if self.reloading and 0.3 <= self.reload_phase <= 0.5:
+            mag_offset = 15  # Magazine drops out
+        elif self.reloading and 0.5 < self.reload_phase <= 0.8:
+            mag_offset = 15 * (1 - (self.reload_phase - 0.5) / 0.3)  # Magazine comes back
+
+        mag_angle = angle + math.pi/2 + 0.3
+        mag_x = gun_start_x + math.cos(angle) * (8 - recoil)
+        mag_y = gun_start_y + math.sin(angle) * (8 - recoil)
+        mag_end_x = mag_x + math.cos(mag_angle) * (8 + mag_offset)
+        mag_end_y = mag_y + math.sin(mag_angle) * (8 + mag_offset)
+        pygame.draw.line(screen, (60, 55, 50), (mag_x, mag_y), (mag_end_x, mag_end_y), 5)
+
+        # Front sight
+        sight_x = barrel_end_x - math.cos(angle) * 3
+        sight_y = barrel_end_y - math.sin(angle) * 3
+        pygame.draw.circle(screen, (30, 30, 30), (int(sight_x), int(sight_y)), 2)
+
+    def draw_handgun(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
+        """Draw realistic pistol"""
+        angle = self.angle + reload_tilt
+        # Start gun from edge of player body
+        gun_start_x = sx + math.cos(self.angle) * self.radius + reload_x
+        gun_start_y = sy + math.sin(self.angle) * self.radius + reload_y
+
+        # Slide (top part) - animate slide during reload
+        slide_offset = 0
+        if self.reloading and self.reload_phase < 0.3:
+            slide_offset = (self.reload_phase / 0.3) * 6
+
+        slide_length = 14 - recoil - slide_offset
+        slide_end_x = gun_start_x + math.cos(angle) * slide_length
+        slide_end_y = gun_start_y + math.sin(angle) * slide_length
+        pygame.draw.line(screen, (45, 45, 50),
+                        (gun_start_x, gun_start_y),
+                        (slide_end_x, slide_end_y), 5)
+
+        # Barrel (inside slide)
+        pygame.draw.line(screen, (30, 30, 30),
+                        (gun_start_x + math.cos(angle) * 2, gun_start_y + math.sin(angle) * 2),
+                        (slide_end_x, slide_end_y), 2)
+
+        # Grip
+        grip_angle = angle + math.pi/2 + 0.4
+        grip_x = gun_start_x
+        grip_y = gun_start_y
+        grip_end_x = grip_x + math.cos(grip_angle) * 10
+        grip_end_y = grip_y + math.sin(grip_angle) * 10
+        pygame.draw.line(screen, (60, 50, 40), (grip_x, grip_y), (grip_end_x, grip_end_y), 6)
+
+        # Magazine (animate during reload)
+        if self.reloading and 0.3 <= self.reload_phase <= 0.7:
+            # Draw magazine falling/inserting
+            mag_progress = (self.reload_phase - 0.3) / 0.4
+            mag_drop = 20 * (1 - abs(mag_progress - 0.5) * 2)
+            mag_x = grip_x + math.cos(grip_angle) * (5 + mag_drop)
+            mag_y = grip_y + math.sin(grip_angle) * (5 + mag_drop)
+            pygame.draw.rect(screen, (70, 60, 50), (mag_x - 3, mag_y - 3, 6, 10))
+
+        # Trigger guard
+        pygame.draw.circle(screen, (50, 50, 50), (int(grip_x), int(grip_y)), 3, 1)
+
+    def draw_knife(self, screen, sx, sy):
+        """Draw combat knife"""
+        angle = self.angle
+        # Start knife from edge of player body
+        knife_start_x = sx + math.cos(angle) * self.radius
+        knife_start_y = sy + math.sin(angle) * self.radius
+
+        blade_length = 20
+
+        # Blade
+        blade_end_x = knife_start_x + math.cos(angle) * blade_length
+        blade_end_y = knife_start_y + math.sin(angle) * blade_length
+
+        # Blade shape (tapered)
+        pygame.draw.line(screen, (180, 180, 190),
+                        (knife_start_x, knife_start_y),
+                        (blade_end_x, blade_end_y), 4)
+
+        # Blade edge highlight
+        pygame.draw.line(screen, (220, 220, 230),
+                        (knife_start_x + math.cos(angle) * 2, knife_start_y + math.sin(angle) * 2),
+                        (blade_end_x, blade_end_y), 2)
+
+        # Guard at the start
+        guard_angle = angle + math.pi/2
+        guard_x1 = knife_start_x + math.cos(guard_angle) * 5
+        guard_y1 = knife_start_y + math.sin(guard_angle) * 5
+        guard_x2 = knife_start_x + math.cos(guard_angle + math.pi) * 5
+        guard_y2 = knife_start_y + math.sin(guard_angle + math.pi) * 5
+        pygame.draw.line(screen, (60, 60, 60), (guard_x1, guard_y1), (guard_x2, guard_y2), 3)
+
+    def draw_grenade_weapon(self, screen, sx, sy):
+        """Draw grenade in hand"""
+        angle = self.angle
+        # Hand position - outside player body
+        hand_x = sx + math.cos(angle) * (self.radius + 8)
+        hand_y = sy + math.sin(angle) * (self.radius + 8)
+
+        # Grenade body
+        pygame.draw.circle(screen, (60, 80, 60), (int(hand_x), int(hand_y)), 7)
+        pygame.draw.circle(screen, (80, 100, 80), (int(hand_x), int(hand_y)), 7, 2)
+
+        # Spoon/lever
+        spoon_end_x = hand_x + math.cos(angle - 0.5) * 10
+        spoon_end_y = hand_y + math.sin(angle - 0.5) * 10
+        pygame.draw.line(screen, (100, 100, 100), (hand_x, hand_y), (spoon_end_x, spoon_end_y), 2)
+
+        # Pin ring
+        pygame.draw.circle(screen, (150, 140, 50), (int(hand_x + 3), int(hand_y - 3)), 3, 1)
+
+    def draw_shotgun(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
+        """Draw pump-action shotgun"""
+        angle = self.angle + reload_tilt
+        # Start gun from edge of player body
+        gun_start_x = sx + math.cos(self.angle) * self.radius + reload_x
+        gun_start_y = sy + math.sin(self.angle) * self.radius + reload_y
+
+        # Long barrel
+        barrel_length = 28 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+
+        # Main barrel
+        pygame.draw.line(screen, (40, 40, 45),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 7)
+
+        # Barrel inner
+        pygame.draw.line(screen, (25, 25, 25),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 3)
+
+        # Pump/forend - animate during reload
+        pump_offset = 0
+        if self.reloading:
+            if self.reload_phase < 0.4:
+                pump_offset = (self.reload_phase / 0.4) * 10  # Pull back
+            elif self.reload_phase < 0.6:
+                pump_offset = 10  # Hold back
+            else:
+                pump_offset = 10 * (1 - (self.reload_phase - 0.6) / 0.4)  # Push forward
+
+        pump_pos = 10 - recoil - pump_offset
+        pump_x = gun_start_x + math.cos(angle) * pump_pos
+        pump_y = gun_start_y + math.sin(angle) * pump_pos
+        pygame.draw.circle(screen, (90, 70, 50), (int(pump_x), int(pump_y)), 5)
+
+        # Shell ejecting during reload
+        if self.reloading and 0.35 <= self.reload_phase <= 0.45:
+            shell_progress = (self.reload_phase - 0.35) / 0.1
+            shell_x = pump_x + math.cos(angle + math.pi/2) * (5 + shell_progress * 15)
+            shell_y = pump_y + math.sin(angle + math.pi/2) * (5 + shell_progress * 15)
+            pygame.draw.ellipse(screen, (200, 50, 50), (shell_x - 3, shell_y - 2, 8, 4))
+
+    def draw_rpg(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
+        """Draw RPG launcher"""
+        angle = self.angle + reload_tilt
+        # Start gun from edge of player body
+        gun_start_x = sx + math.cos(self.angle) * self.radius + reload_x
+        gun_start_y = sy + math.sin(self.angle) * self.radius + reload_y
+
+        # Launcher tube
+        tube_length = 30 - recoil
+        tube_end_x = gun_start_x + math.cos(angle) * tube_length
+        tube_end_y = gun_start_y + math.sin(angle) * tube_length
+
+        # Main tube (olive drab)
+        pygame.draw.line(screen, (70, 80, 50),
+                        (gun_start_x, gun_start_y),
+                        (tube_end_x, tube_end_y), 12)
+
+        # Tube opening
+        pygame.draw.circle(screen, (40, 40, 40), (int(tube_end_x), int(tube_end_y)), 5)
+
+        # Rocket tip visible (animate during reload)
+        if not self.reloading or self.reload_phase > 0.7:
+            pygame.draw.circle(screen, (60, 60, 60), (int(tube_end_x), int(tube_end_y)), 3)
+        elif self.reloading and 0.3 <= self.reload_phase <= 0.7:
+            # Show rocket being inserted
+            rocket_progress = (self.reload_phase - 0.3) / 0.4
+            rocket_x = tube_end_x + math.cos(angle) * (15 * (1 - rocket_progress))
+            rocket_y = tube_end_y + math.sin(angle) * (15 * (1 - rocket_progress))
+            pygame.draw.circle(screen, (80, 80, 60), (int(rocket_x), int(rocket_y)), 4)
+
+        # Grip/trigger
+        grip_angle = angle + math.pi/2 + 0.3
+        grip_x = gun_start_x + math.cos(angle) * 5
+        grip_y = gun_start_y + math.sin(angle) * 5
+        grip_end_x = grip_x + math.cos(grip_angle) * 12
+        grip_end_y = grip_y + math.sin(grip_angle) * 12
+        pygame.draw.line(screen, (50, 50, 45), (grip_x, grip_y), (grip_end_x, grip_end_y), 5)
+
+        # Rear sight
+        sight_x = gun_start_x + math.cos(angle) * 8
+        sight_y = gun_start_y + math.sin(angle) * 8
+        sight_up_x = sight_x + math.cos(angle - math.pi/2) * 6
+        sight_up_y = sight_y + math.sin(angle - math.pi/2) * 6
+        pygame.draw.line(screen, (60, 60, 55), (sight_x, sight_y), (sight_up_x, sight_up_y), 2)
+
+    def draw_sniper(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
+        """Draw sniper rifle with scope"""
+        angle = self.angle + reload_tilt
+        # Start gun from edge of player body
+        gun_start_x = sx + math.cos(self.angle) * self.radius + reload_x
+        gun_start_y = sy + math.sin(self.angle) * self.radius + reload_y
+
+        # Long barrel
+        barrel_length = 35 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+
+        # Main barrel (dark)
+        pygame.draw.line(screen, (35, 35, 40),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 5)
+
+        # Barrel highlight
+        pygame.draw.line(screen, (55, 55, 60),
+                        (gun_start_x, gun_start_y),
+                        (barrel_end_x, barrel_end_y), 2)
+
+        # Scope (the defining feature)
+        scope_x = gun_start_x + math.cos(angle) * (12 - recoil)
+        scope_y = gun_start_y + math.sin(angle) * (12 - recoil)
+        # Scope body
+        scope_up_angle = angle - math.pi/2
+        scope_top_x = scope_x + math.cos(scope_up_angle) * 8
+        scope_top_y = scope_y + math.sin(scope_up_angle) * 8
+        pygame.draw.line(screen, (20, 20, 25), (scope_x, scope_y), (scope_top_x, scope_top_y), 6)
+        # Scope lens
+        pygame.draw.circle(screen, (100, 150, 200), (int(scope_top_x), int(scope_top_y)), 4)
+        pygame.draw.circle(screen, (50, 80, 120), (int(scope_top_x), int(scope_top_y)), 4, 1)
+
+        # Bipod hints
+        bipod_x = gun_start_x + math.cos(angle) * (barrel_length - 8)
+        bipod_y = gun_start_y + math.sin(angle) * (barrel_length - 8)
+        bipod_angle = angle + math.pi/2 + 0.5
+        bipod_end_x = bipod_x + math.cos(bipod_angle) * 6
+        bipod_end_y = bipod_y + math.sin(bipod_angle) * 6
+        pygame.draw.line(screen, (60, 60, 60), (bipod_x, bipod_y), (bipod_end_x, bipod_end_y), 2)
+
+
+class Game:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Arena Shooter 2D - Robot Battle")
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.Font(None, 48)
+        self.big_font = pygame.font.Font(None, 72)
+        self.small_font = pygame.font.Font(None, 32)
+
+        self.state = "login"  # login, menu, playing, gameover, shop
+        self.difficulty = "medium"
+        self.camera = Camera()
+        self.shop_prompted = False  # Track if we already asked about RPG
+
+        # Login system
+        self.username_input = ""
+        self.passcode_input = ""
+        self.login_mode = "login"  # "login" or "register"
+        self.login_message = ""
+        self.active_input = "username"  # "username" or "passcode"
+
+        # Web version: disable music (too slow to generate in browser)
+        self.boss_music = None
+        self.menu_music = None
+        self.current_music = None
+
+        self.reset_game()
+
+    def play_boss_music(self):
+        """Play intense boss battle music"""
+        if self.boss_music and self.current_music != "boss":
+            self.boss_music.play(loops=-1)
+            self.current_music = "boss"
+
+    def play_menu_music(self):
+        """Play calm menu music"""
+        if self.menu_music and self.current_music != "menu":
+            pygame.mixer.stop()
+            self.menu_music.play(loops=-1)
+            self.current_music = "menu"
+
+    def stop_music(self):
+        """Stop all music"""
+        try:
+            pygame.mixer.stop()
+        except:
+            pass
+        self.current_music = None
+
+    def reset_game(self):
+        self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+        self.robots = []
+        self.bullets = []
+        self.grenades = []
+        self.explosions = []
+        self.obstacles = []
+        self.shell_casings = []  # Shell casing particles
+        self.muzzle_flashes = []  # Muzzle flash effects
+        self.healing_effects = []  # Healing visual effects
+        self.score = 0
+        self.kills = 0
+        self.shop_prompted = False
+        self.show_save_message = 0  # Timer for save message display
+
+        # Wave system for impossible mode
+        self.current_wave = 1
+        self.max_waves = 5
+        self.boss = None
+        self.wave_complete_timer = 0
+
+        self.create_obstacles()
+
+    def create_obstacles(self):
+        self.obstacles = []
+
+        # Border walls
+        wall_thickness = 50
+        self.obstacles.append(Obstacle(0, 0, MAP_WIDTH, wall_thickness))  # Top
+        self.obstacles.append(Obstacle(0, MAP_HEIGHT - wall_thickness, MAP_WIDTH, wall_thickness))  # Bottom
+        self.obstacles.append(Obstacle(0, 0, wall_thickness, MAP_HEIGHT))  # Left
+        self.obstacles.append(Obstacle(MAP_WIDTH - wall_thickness, 0, wall_thickness, MAP_HEIGHT))  # Right
+
+        # Random cover obstacles throughout the map
+        num_obstacles = 60
+        for _ in range(num_obstacles):
+            width = random.randint(60, 150)
+            height = random.randint(60, 150)
+            x = random.randint(100, MAP_WIDTH - 100 - width)
+            y = random.randint(100, MAP_HEIGHT - 100 - height)
+
+            # Don't place too close to center (player spawn)
+            center_x, center_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
+            if abs(x + width/2 - center_x) > 200 or abs(y + height/2 - center_y) > 200:
+                self.obstacles.append(Obstacle(x, y, width, height))
+
+    def spawn_robots(self):
+        settings = DIFFICULTY[self.difficulty]
+        self.robots = []
+
+        total_count = settings["count"]
+        knife_count = total_count // 2  # Half are knife-only
+        spawned = 0
+
+        for i in range(total_count):
+            attempts = 0
+            while attempts < 50:
+                x = random.randint(100, MAP_WIDTH - 100)
+                y = random.randint(100, MAP_HEIGHT - 100)
+
+                # Not too close to player
+                dist_to_player = math.sqrt((x - self.player.x)**2 + (y - self.player.y)**2)
+                if dist_to_player > 400:
+                    # Check not inside obstacle
+                    valid = True
+                    for obs in self.obstacles:
+                        if obs.collides_circle(x, y, 25):
+                            valid = False
+                            break
+
+                    if valid:
+                        # First half are knife-only bots
+                        is_knife_only = (spawned < knife_count)
+                        self.robots.append(Robot(x, y, self.difficulty, knife_only=is_knife_only))
+                        spawned += 1
+                        break
+
+                attempts += 1
+
+    def spawn_boss(self):
+        """Spawn the boss for impossible mode"""
+        # Spawn boss far from player
+        while True:
+            x = random.randint(200, MAP_WIDTH - 200)
+            y = random.randint(200, MAP_HEIGHT - 200)
+            dist_to_player = math.sqrt((x - self.player.x)**2 + (y - self.player.y)**2)
+            if dist_to_player > 600:
+                self.boss = Boss(x, y)
+                break
+
+    def next_wave(self):
+        """Start the next wave in impossible mode"""
+        self.current_wave += 1
+        if self.current_wave <= self.max_waves:
+            self.spawn_robots()
+            # On final wave, spawn the boss too
+            if self.current_wave == self.max_waves:
+                self.spawn_boss()
+
+    def start_game(self, difficulty):
+        self.difficulty = difficulty
+        self.reset_game()
+        # In impossible mode, player gets 10000 health
+        if difficulty == "impossible":
+            self.player.health = 10000
+            self.player.max_health = 10000
+        self.spawn_robots()
+        self.state = "playing"
+        self.play_boss_music()
+
+    def handle_melee_attack(self, attack):
+        """Handle knife melee attack - hit robots in close range"""
+        melee_range = 50  # Close range for knife
+        px, py = attack["x"], attack["y"]
+        angle = attack["angle"]
+        damage = attack["damage"]
+
+        # Check all robots in melee range and in front of player
+        for robot in self.robots[:]:
+            dx = robot.x - px
+            dy = robot.y - py
+            dist = math.sqrt(dx*dx + dy*dy)
+
+            if dist < melee_range:
+                # Check if robot is roughly in front of player
+                angle_to_robot = math.atan2(dy, dx)
+                angle_diff = abs(angle - angle_to_robot)
+                if angle_diff > math.pi:
+                    angle_diff = 2 * math.pi - angle_diff
+
+                if angle_diff < math.pi / 2:  # 90 degree cone in front
+                    if robot.take_damage(damage):
+                        self.robots.remove(robot)
+                        self.kills += 1
+                        self.score += DIFFICULTY[self.difficulty]["points"]
+                        self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])
+                        if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
+                            self.state = "shop"
+                        elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
+                            self.state = "shop"
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+
+            if event.type == pygame.KEYDOWN:
+                if self.state == "login":
+                    if event.key == pygame.K_TAB:
+                        # Switch between username and passcode
+                        self.active_input = "passcode" if self.active_input == "username" else "username"
+                    elif event.key == pygame.K_r:
+                        # Toggle between login and register mode
+                        self.login_mode = "register" if self.login_mode == "login" else "login"
+                        self.login_message = ""
+                    elif event.key == pygame.K_RETURN:
+                        # Submit login/register
+                        if self.login_mode == "register":
+                            success, msg = register_user(self.username_input, self.passcode_input)
+                            self.login_message = msg
+                            if success:
+                                # Auto-login after register
+                                login_user(self.username_input, self.passcode_input)
+                                self.state = "menu"
+                        else:
+                            success, msg = login_user(self.username_input, self.passcode_input)
+                            self.login_message = msg
+                            if success:
+                                self.state = "menu"
+                    elif event.key == pygame.K_ESCAPE:
+                        # Play as guest (skip login)
+                        self.state = "menu"
+                    elif event.key == pygame.K_BACKSPACE:
+                        # Delete character
+                        if self.active_input == "username":
+                            self.username_input = self.username_input[:-1]
+                        else:
+                            self.passcode_input = self.passcode_input[:-1]
+                    else:
+                        # Add character to input
+                        char = event.unicode
+                        if char.isalnum() or char == "_":
+                            if self.active_input == "username" and len(self.username_input) < 20:
+                                self.username_input += char
+                            elif self.active_input == "passcode" and len(self.passcode_input) < 20:
+                                self.passcode_input += char
+
+                elif self.state == "menu":
+                    if event.key == pygame.K_1:
+                        self.start_game("easy")
+                    elif event.key == pygame.K_2:
+                        self.start_game("medium")
+                    elif event.key == pygame.K_3:
+                        self.start_game("hard")
+                    elif event.key == pygame.K_4:
+                        self.start_game("impossible")
+                    elif event.key == pygame.K_l:
+                        # L key - Login/Logout
+                        if current_user:
+                            logout_user()
+                        else:
+                            self.state = "login"
+                            self.username_input = ""
+                            self.passcode_input = ""
+                            self.login_message = ""
+                    elif event.key == pygame.K_ESCAPE:
+                        return False
+
+                elif self.state == "playing":
+                    if event.key == pygame.K_r:
+                        # Start reload animation (don't instant reload)
+                        if not self.player.reloading:
+                            self.player.start_reload()
+                    elif event.key == pygame.K_q:
+                        self.player.switch_weapon()
+                    elif event.key == pygame.K_RETURN:
+                        # Knife attack with Enter key
+                        if self.player.weapon.get("melee", False):
+                            result = self.player.shoot()
+                            if result and isinstance(result, dict) and result.get("melee"):
+                                self.handle_melee_attack(result)
+                    elif event.key == pygame.K_h:
+                        # Use medkit
+                        if self.player.use_medkit():
+                            self.healing_effects.append(HealingEffect(self.player.x, self.player.y))
+                    elif event.key == pygame.K_TAB:
+                        # Open shop
+                        self.state = "shop"
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "menu"
+                        self.play_menu_music()
+
+                elif self.state == "gameover":
+                    if event.key == pygame.K_r:
+                        self.start_game(self.difficulty)
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "menu"
+                        self.play_menu_music()
+
+                elif self.state == "shop":
+                    if event.key == pygame.K_1:
+                        # Buy Shotgun
+                        if not self.player.has_shotgun and self.player.coins >= 10:
+                            self.player.unlock_shotgun()
+                        self.state = "playing"
+                    elif event.key == pygame.K_2:
+                        # Buy RPG
+                        if not self.player.has_rpg and self.player.coins >= 50:
+                            self.player.unlock_rpg()
+                        self.state = "playing"
+                    elif event.key == pygame.K_3:
+                        # Buy Medkit (adds 3 charges, can only buy once)
+                        if self.player.coins >= 90 and self.player.medkit_charges == 0:
+                            self.player.coins -= 90
+                            self.player.medkit_charges += 3
+                            self.player.save_progress()
+                        self.state = "playing"
+                    elif event.key == pygame.K_4:
+                        # Buy Sniper
+                        if not self.player.has_sniper and self.player.coins >= 100:
+                            self.player.unlock_sniper()
+                        self.state = "playing"
+                    elif event.key == pygame.K_ESCAPE or event.key == pygame.K_n:
+                        # Close shop - stop auto-prompting
+                        self.shop_prompted = True
+                        self.state = "playing"
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1 and self.state == "playing":
+                    # Check if shop button clicked
+                    mouse_pos = pygame.mouse.get_pos()
+                    if hasattr(self, 'shop_btn_rect') and self.shop_btn_rect.collidepoint(mouse_pos):
+                        self.state = "shop"
+                    # Check weapon type
+                    elif self.player.weapon.get("grenade", False):
+                        # Throw grenade
+                        result = self.player.shoot()
+                        if result:
+                            grenade = Grenade(result["x"], result["y"], result["angle"])
+                            self.grenades.append(grenade)
+                    elif not self.player.weapon.get("melee", False):
+                        result = self.player.shoot()
+                        if result:
+                            self.bullets.append(result)
+
+        # Continuous shooting while mouse held (not for melee or grenade)
+        if self.state == "playing":
+            if pygame.mouse.get_pressed()[0] and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
+                result = self.player.shoot()
+                if result:
+                    self.bullets.append(result)
+                    # Add realistic gun effects
+                    self.add_gun_effects()
+
+        return True
+
+    def add_gun_effects(self):
+        """Add muzzle flash, shell casing, and recoil when shooting"""
+        weapon_name = self.player.weapon["name"]
+
+        # Calculate muzzle position (end of gun barrel)
+        gun_lengths = {"Rifle": 28, "Handgun": 16, "Shotgun": 32, "Sniper": 40, "RPG": 35}
+        gun_length = gun_lengths.get(weapon_name, 20)
+        muzzle_x = self.player.x + math.cos(self.player.angle) * gun_length
+        muzzle_y = self.player.y + math.sin(self.player.angle) * gun_length
+
+        # Add muzzle flash (not for RPG - it has backblast)
+        if weapon_name != "RPG":
+            flash_size = {"Rifle": 1.0, "Handgun": 0.7, "Shotgun": 1.5, "Sniper": 1.2}.get(weapon_name, 1.0)
+            self.muzzle_flashes.append(MuzzleFlash(muzzle_x, muzzle_y, self.player.angle, flash_size))
+
+        # Add shell casing (not for RPG or Shotgun pump)
+        if weapon_name in ["Rifle", "Handgun", "Sniper"]:
+            # Shell ejects from ejection port (side of gun)
+            eject_x = self.player.x + math.cos(self.player.angle) * (self.player.radius + 8)
+            eject_y = self.player.y + math.sin(self.player.angle) * (self.player.radius + 8)
+            self.shell_casings.append(ShellCasing(eject_x, eject_y, self.player.angle))
+
+        # Apply recoil based on weapon
+        recoil_amounts = {"Rifle": 3, "Handgun": 2, "Shotgun": 8, "Sniper": 6, "RPG": 10}
+        recoil = recoil_amounts.get(weapon_name, 2)
+        self.player.apply_recoil(recoil)
+
+    def update(self):
+        if self.state != "playing":
+            return
+
+        keys = pygame.key.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Update player
+        self.player.update(keys, mouse_pos, self.camera, self.obstacles)
+        self.player.update_recoil()  # Update recoil recovery
+        self.player.update_reload()  # Update reload animation
+
+        # Update camera
+        self.camera.update(self.player.x, self.player.y)
+
+        # Update shell casings
+        for casing in self.shell_casings[:]:
+            if not casing.update():
+                self.shell_casings.remove(casing)
+
+        # Update muzzle flashes
+        for flash in self.muzzle_flashes[:]:
+            if not flash.update():
+                self.muzzle_flashes.remove(flash)
+
+        # Update healing effects
+        for effect in self.healing_effects[:]:
+            if not effect.update(self.player.x, self.player.y):
+                self.healing_effects.remove(effect)
+
+        # Update bullets
+        for bullet in self.bullets[:]:
+            bullet.update()
+
+            if bullet.lifetime <= 0:
+                self.bullets.remove(bullet)
+                continue
+
+            # Check obstacle collision
+            for obs in self.obstacles:
+                if obs.collides_point(bullet.x, bullet.y):
+                    if bullet in self.bullets:
+                        self.bullets.remove(bullet)
+                    break
+
+            if bullet not in self.bullets:
+                continue
+
+            # Player bullets hit robots
+            if bullet.is_player:
+                hit_something = False
+
+                # Check robots
+                for robot in self.robots[:]:
+                    dist = math.sqrt((bullet.x - robot.x)**2 + (bullet.y - robot.y)**2)
+                    if dist < robot.radius + bullet.radius:
+                        if robot.take_damage(bullet.get_damage()):
+                            self.robots.remove(robot)
+                            self.kills += 1
+                            self.score += DIFFICULTY[self.difficulty]["points"]
+                            self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])  # Add coins for kill
+                            # Check if player has 10 coins for shotgun or 50 for RPG
+                            if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
+                                self.state = "shop"
+                            elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
+                                self.state = "shop"
+                        hit_something = True
+                        break
+
+                # Check boss
+                if not hit_something and self.boss:
+                    dist = math.sqrt((bullet.x - self.boss.x)**2 + (bullet.y - self.boss.y)**2)
+                    if dist < self.boss.radius + bullet.radius:
+                        if self.boss.take_damage(bullet.get_damage()):
+                            # Boss defeated!
+                            self.boss = None
+                            self.kills += 1
+                            self.score += 5000  # Big bonus for boss
+                            self.player.add_coin(100)  # Big coin reward
+                        hit_something = True
+
+                if hit_something and bullet in self.bullets:
+                    self.bullets.remove(bullet)
+
+            # Robot bullets hit player
+            else:
+                dist = math.sqrt((bullet.x - self.player.x)**2 + (bullet.y - self.player.y)**2)
+                if dist < self.player.radius + bullet.radius:
+                    if self.player.take_damage(bullet.damage):
+                        self.state = "gameover"
+                        self.stop_music()
+                    if bullet in self.bullets:
+                        self.bullets.remove(bullet)
+
+        # Update grenades
+        for grenade in self.grenades[:]:
+            grenade.update()
+
+            if grenade.should_explode():
+                # Create explosion
+                explosion = Explosion(grenade.x, grenade.y, grenade.explosion_radius)
+                self.explosions.append(explosion)
+
+                # Damage robots in explosion radius
+                for robot in self.robots[:]:
+                    dist = math.sqrt((grenade.x - robot.x)**2 + (grenade.y - robot.y)**2)
+                    if dist < grenade.explosion_radius:
+                        # Damage falls off with distance
+                        damage_mult = 1 - (dist / grenade.explosion_radius) * 0.5
+                        damage = int(grenade.damage * damage_mult)
+                        if robot.take_damage(damage):
+                            self.robots.remove(robot)
+                            self.kills += 1
+                            self.score += DIFFICULTY[self.difficulty]["points"]
+                            self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])
+                            if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
+                                self.state = "shop"
+                            elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
+                                self.state = "shop"
+
+                # Damage player if in explosion radius
+                dist = math.sqrt((grenade.x - self.player.x)**2 + (grenade.y - self.player.y)**2)
+                if dist < grenade.explosion_radius:
+                    damage_mult = 1 - (dist / grenade.explosion_radius) * 0.5
+                    damage = int(grenade.damage * damage_mult * 0.5)  # Player takes less self-damage
+                    if self.player.take_damage(damage):
+                        self.state = "gameover"
+                        self.stop_music()
+
+                grenade.exploded = True
+                self.grenades.remove(grenade)
+
+        # Update explosions
+        for explosion in self.explosions[:]:
+            explosion.update()
+            if explosion.is_done():
+                self.explosions.remove(explosion)
+
+        # Update robots
+        for robot in self.robots:
+            robot.update(self.player.x, self.player.y, self.obstacles)
+
+            # Robot uses knife when close, otherwise shoots
+            if robot.can_knife(self.player.x, self.player.y):
+                damage = robot.knife_attack()
+                if self.player.take_damage(damage):
+                    self.state = "gameover"
+                    self.stop_music()
+            elif robot.can_shoot():
+                bullet = robot.shoot(self.player.x, self.player.y)
+                bullet.damage = DIFFICULTY[self.difficulty]["damage"]
+                self.bullets.append(bullet)
+
+        # Update boss (impossible mode)
+        if self.boss:
+            self.boss.update(self.player.x, self.player.y, self.obstacles)
+
+            # Boss shoots multiple bullets
+            if self.boss.can_shoot():
+                bullets = self.boss.shoot(self.player.x, self.player.y)
+                self.bullets.extend(bullets)
+
+            # Check boss collision with player (charge attack damage)
+            dist_to_boss = math.sqrt((self.boss.x - self.player.x)**2 + (self.boss.y - self.player.y)**2)
+            if dist_to_boss < self.boss.radius + self.player.radius:
+                if self.player.take_damage(20):
+                    self.state = "gameover"
+                    self.stop_music()
+
+        # Check win conditions
+        if self.difficulty == "impossible":
+            # Wave-based win condition
+            if len(self.robots) == 0 and self.boss is None:
+                if self.current_wave < self.max_waves:
+                    # Start next wave
+                    self.wave_complete_timer += 1
+                    if self.wave_complete_timer > 120:  # 2 second delay
+                        self.wave_complete_timer = 0
+                        self.next_wave()
+                else:
+                    # All waves complete and boss dead
+                    self.state = "gameover"
+                    self.stop_music()
+        else:
+            # Normal win condition
+            if len(self.robots) == 0:
+                self.state = "gameover"
+                self.stop_music()
+
+    def draw_background(self):
+        # Fill with floor color
+        self.screen.fill(FLOOR_COLOR)
+
+        # Draw grid
+        grid_size = 100
+        for x in range(0, MAP_WIDTH, grid_size):
+            sx, _ = self.camera.apply(x, 0)
+            if 0 <= sx <= SCREEN_WIDTH:
+                pygame.draw.line(self.screen, (60, 65, 70), (sx, 0), (sx, SCREEN_HEIGHT))
+
+        for y in range(0, MAP_HEIGHT, grid_size):
+            _, sy = self.camera.apply(0, y)
+            if 0 <= sy <= SCREEN_HEIGHT:
+                pygame.draw.line(self.screen, (60, 65, 70), (0, sy), (SCREEN_WIDTH, sy))
+
+    def draw_minimap(self):
+        # Minimap in corner
+        map_size = 200
+        map_x = SCREEN_WIDTH - map_size - 20
+        map_y = 20
+
+        # Background
+        pygame.draw.rect(self.screen, DARK_GRAY, (map_x, map_y, map_size, map_size))
+        pygame.draw.rect(self.screen, WHITE, (map_x, map_y, map_size, map_size), 2)
+
+        # Scale factor
+        scale = map_size / MAP_WIDTH
+
+        # Draw obstacles
+        for obs in self.obstacles:
+            ox = map_x + int(obs.x * scale)
+            oy = map_y + int(obs.y * scale)
+            ow = max(2, int(obs.width * scale))
+            oh = max(2, int(obs.height * scale))
+            pygame.draw.rect(self.screen, BROWN, (ox, oy, ow, oh))
+
+        # Draw robots (knife bots = white, gun bots = red)
+        for robot in self.robots:
+            rx = map_x + int(robot.x * scale)
+            ry = map_y + int(robot.y * scale)
+            robot_color = WHITE if robot.knife_only else RED
+            pygame.draw.circle(self.screen, robot_color, (rx, ry), 3)
+
+        # Draw player
+        px = map_x + int(self.player.x * scale)
+        py = map_y + int(self.player.y * scale)
+        pygame.draw.circle(self.screen, BLUE, (px, py), 4)
+
+        # Draw boss on minimap (purple, bigger)
+        if self.boss:
+            bx = map_x + int(self.boss.x * scale)
+            by = map_y + int(self.boss.y * scale)
+            pygame.draw.circle(self.screen, (150, 0, 150), (bx, by), 6)
+
+        # Draw camera view box
+        cx = map_x + int(self.camera.x * scale)
+        cy = map_y + int(self.camera.y * scale)
+        cw = int(SCREEN_WIDTH * scale)
+        ch = int(SCREEN_HEIGHT * scale)
+        pygame.draw.rect(self.screen, WHITE, (cx, cy, cw, ch), 1)
+
+    def draw_hud(self):
+        # Health bar
+        bar_width = 250
+        bar_height = 25
+        bar_x = 20
+        bar_y = 20
+
+        pygame.draw.rect(self.screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
+        health_width = int((self.player.health / self.player.max_health) * bar_width)
+        health_color = GREEN if self.player.health > 50 else YELLOW if self.player.health > 25 else RED
+        pygame.draw.rect(self.screen, health_color, (bar_x, bar_y, health_width, bar_height))
+        pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
+
+        hp_text = self.small_font.render(f"HP: {int(self.player.health)}", True, WHITE)
+        self.screen.blit(hp_text, (bar_x + 5, bar_y + 3))
+
+        # Weapon and Ammo with reloads on the right
+        weapon_name = self.player.weapon["name"]
+        weapon_color = self.player.weapon["color"]
+        reloads = self.player.weapon.get("reloads", 0)
+
+        # Show reloads (infinite for knife, none for grenade)
+        if self.player.weapon.get("melee", False):
+            reload_str = "INF"
+        elif self.player.weapon.get("no_reload", False):
+            reload_str = "N/A"
+        else:
+            reload_str = str(reloads)
+
+        weapon_text = self.font.render(f"{weapon_name}: {self.player.ammo}/{self.player.max_ammo}", True, weapon_color)
+        self.screen.blit(weapon_text, (20, 55))
+
+        # Reloads display on the right of ammo
+        reload_color = GREEN if reloads > 2 or self.player.weapon.get("melee", False) else YELLOW if reloads > 0 else RED
+        reload_text = self.small_font.render(f"[{reload_str}]", True, reload_color)
+        self.screen.blit(reload_text, (20 + weapon_text.get_width() + 10, 60))
+
+        # Switch weapon hint
+        switch_text = self.small_font.render("[Q] Switch Weapon", True, GRAY)
+        self.screen.blit(switch_text, (20, 95))
+
+        # Coins display (top right corner)
+        coin_color = YELLOW if self.player.coins < 10 else GREEN
+        coin_text = self.font.render(f"Coins: {self.player.coins}", True, coin_color)
+        self.screen.blit(coin_text, (SCREEN_WIDTH - 220 - coin_text.get_width()//2, 230))
+
+        # Shotgun status
+        if self.player.has_shotgun:
+            shotgun_text = self.small_font.render("Shotgun Unlocked!", True, GREEN)
+        else:
+            shotgun_text = self.small_font.render(f"Shotgun: 10 coins needed", True, GRAY)
+        self.screen.blit(shotgun_text, (SCREEN_WIDTH - 220 - shotgun_text.get_width()//2, 265))
+
+        # RPG status
+        if self.player.has_rpg:
+            rpg_text = self.small_font.render("RPG Unlocked!", True, GREEN)
+        else:
+            rpg_text = self.small_font.render(f"RPG: 50 coins needed", True, GRAY)
+        self.screen.blit(rpg_text, (SCREEN_WIDTH - 220 - rpg_text.get_width()//2, 290))
+
+        # Medkit charges
+        medkit_color = GREEN if self.player.medkit_charges > 0 else GRAY
+        medkit_text = self.small_font.render(f"Medkits: {self.player.medkit_charges} [H]", True, medkit_color)
+        self.screen.blit(medkit_text, (SCREEN_WIDTH - 220 - medkit_text.get_width()//2, 315))
+
+        # Score and kills
+        score_text = self.small_font.render(f"Score: {self.score} | Kills: {self.kills}", True, YELLOW)
+        self.screen.blit(score_text, (20, SCREEN_HEIGHT - 40))
+
+        # Robots remaining
+        robots_text = self.small_font.render(f"Robots: {len(self.robots)}", True, ORANGE)
+        self.screen.blit(robots_text, (20, SCREEN_HEIGHT - 70))
+
+        # Wave info for impossible mode
+        if self.difficulty == "impossible":
+            wave_text = self.font.render(f"Wave {self.current_wave}/{self.max_waves}", True, (150, 0, 150))
+            self.screen.blit(wave_text, (SCREEN_WIDTH // 2 - wave_text.get_width() // 2, 10))
+
+            # Wave complete message
+            if len(self.robots) == 0 and self.boss is None and self.current_wave < self.max_waves:
+                next_wave_text = self.font.render("Wave Complete! Next wave incoming...", True, GREEN)
+                self.screen.blit(next_wave_text, (SCREEN_WIDTH // 2 - next_wave_text.get_width() // 2, 130))
+
+        # Reload hint
+        if self.player.ammo == 0:
+            reload_text = self.font.render("Press R to Reload!", True, RED)
+            self.screen.blit(reload_text, (SCREEN_WIDTH // 2 - reload_text.get_width() // 2, 100))
+
+        # Save message
+        if self.show_save_message > 0:
+            save_text = self.font.render("Game Saved!", True, GREEN)
+            self.screen.blit(save_text, (SCREEN_WIDTH // 2 - save_text.get_width() // 2, 140))
+            self.show_save_message -= 1
+
+        # Shop button on middle left side with shopping cart icon
+        shop_btn_width = 60
+        shop_btn_height = 70
+        shop_btn_x = 20
+        shop_btn_y = SCREEN_HEIGHT // 2 - shop_btn_height // 2
+        self.shop_btn_rect = pygame.Rect(shop_btn_x, shop_btn_y, shop_btn_width, shop_btn_height)
+
+        pygame.draw.rect(self.screen, DARK_GRAY, self.shop_btn_rect)
+        pygame.draw.rect(self.screen, YELLOW, self.shop_btn_rect, 3)
+
+        # "SHOP" text above cart
+        shop_label = self.small_font.render("SHOP", True, YELLOW)
+        self.screen.blit(shop_label, (shop_btn_x + shop_btn_width // 2 - shop_label.get_width() // 2, shop_btn_y + 5))
+
+        # Draw shopping cart icon
+        cart_x = shop_btn_x + shop_btn_width // 2
+        cart_y = shop_btn_y + 45
+
+        # Cart body (trapezoid shape)
+        cart_points = [
+            (cart_x - 15, cart_y - 12),  # Top left
+            (cart_x + 15, cart_y - 12),  # Top right
+            (cart_x + 12, cart_y + 5),   # Bottom right
+            (cart_x - 12, cart_y + 5),   # Bottom left
+        ]
+        pygame.draw.polygon(self.screen, YELLOW, cart_points, 2)
+
+        # Cart handle
+        pygame.draw.line(self.screen, YELLOW, (cart_x - 15, cart_y - 12), (cart_x - 20, cart_y - 20), 2)
+
+        # Cart wheels
+        pygame.draw.circle(self.screen, YELLOW, (cart_x - 8, cart_y + 10), 4)
+        pygame.draw.circle(self.screen, YELLOW, (cart_x + 8, cart_y + 10), 4)
+
+    def draw_login_screen(self):
+        """Draw login/register screen"""
+        self.screen.fill(DARK_GRAY)
+
+        # Title
+        title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
+        subtitle = self.font.render("ROBOT BATTLE", True, WHITE)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
+        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 150))
+
+        # Login box
+        box_width = 450
+        box_height = 340
+        box_x = SCREEN_WIDTH // 2 - box_width // 2
+        box_y = 200
+
+        pygame.draw.rect(self.screen, (40, 40, 50), (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, LIGHT_BLUE, (box_x, box_y, box_width, box_height), 3)
+
+        # Mode title
+        mode_text = "LOGIN" if self.login_mode == "login" else "REGISTER"
+        mode_render = self.font.render(mode_text, True, LIGHT_BLUE)
+        self.screen.blit(mode_render, (SCREEN_WIDTH // 2 - mode_render.get_width() // 2, box_y + 15))
+
+        # Username field
+        username_y = box_y + 70
+        username_label = self.small_font.render("Username:", True, WHITE)
+        self.screen.blit(username_label, (box_x + 25, username_y))
+
+        username_box_color = GREEN if self.active_input == "username" else GRAY
+        pygame.draw.rect(self.screen, (30, 30, 40), (box_x + 25, username_y + 25, box_width - 50, 35))
+        pygame.draw.rect(self.screen, username_box_color, (box_x + 25, username_y + 25, box_width - 50, 35), 2)
+
+        username_text = self.font.render(self.username_input, True, WHITE)
+        self.screen.blit(username_text, (box_x + 35, username_y + 28))
+
+        # Cursor for username
+        if self.active_input == "username":
+            cursor_x = box_x + 35 + username_text.get_width()
+            pygame.draw.line(self.screen, WHITE, (cursor_x, username_y + 28), (cursor_x, username_y + 52), 2)
+
+        # Passcode field
+        passcode_y = box_y + 150
+        passcode_label = self.small_font.render("Passcode:", True, WHITE)
+        self.screen.blit(passcode_label, (box_x + 25, passcode_y))
+
+        passcode_box_color = GREEN if self.active_input == "passcode" else GRAY
+        pygame.draw.rect(self.screen, (30, 30, 40), (box_x + 25, passcode_y + 25, box_width - 50, 35))
+        pygame.draw.rect(self.screen, passcode_box_color, (box_x + 25, passcode_y + 25, box_width - 50, 35), 2)
+
+        # Show passcode as asterisks
+        passcode_display = "*" * len(self.passcode_input)
+        passcode_text = self.font.render(passcode_display, True, WHITE)
+        self.screen.blit(passcode_text, (box_x + 35, passcode_y + 28))
+
+        # Cursor for passcode
+        if self.active_input == "passcode":
+            cursor_x = box_x + 35 + passcode_text.get_width()
+            pygame.draw.line(self.screen, WHITE, (cursor_x, passcode_y + 28), (cursor_x, passcode_y + 52), 2)
+
+        # Message (success/error)
+        if self.login_message:
+            msg_color = GREEN if "success" in self.login_message.lower() or "created" in self.login_message.lower() else RED
+            msg_render = self.small_font.render(self.login_message, True, msg_color)
+            self.screen.blit(msg_render, (SCREEN_WIDTH // 2 - msg_render.get_width() // 2, box_y + 235))
+
+        # Instructions
+        instructions = [
+            "[TAB] Switch field | [ENTER] Submit",
+            "[R] Toggle Register/Login | [ESC] Play as Guest"
+        ]
+        y = box_y + 270
+        for instr in instructions:
+            instr_text = self.small_font.render(instr, True, GRAY)
+            self.screen.blit(instr_text, (SCREEN_WIDTH // 2 - instr_text.get_width() // 2, y))
+            y += 22
+
+        # Show current user if logged in
+        if current_user:
+            user_text = self.small_font.render(f"Logged in as: {current_user}", True, GREEN)
+            self.screen.blit(user_text, (SCREEN_WIDTH // 2 - user_text.get_width() // 2, box_y + box_height + 15))
+
+    def draw_menu(self):
+        self.screen.fill(DARK_GRAY)
+
+        title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
+        subtitle = self.font.render("ROBOT BATTLE", True, WHITE)
+
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 150))
+        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 230))
+
+        # Difficulty options
+        easy = self.font.render("[1] EASY - 8 Robots", True, GREEN)
+        medium = self.font.render("[2] MEDIUM - 15 Robots", True, YELLOW)
+        hard = self.font.render("[3] HARD - 25 Robots", True, RED)
+        impossible = self.font.render("[4] IMPOSSIBLE - 5 Waves + BOSS", True, (150, 0, 150))
+
+        self.screen.blit(easy, (SCREEN_WIDTH // 2 - easy.get_width() // 2, 330))
+        self.screen.blit(medium, (SCREEN_WIDTH // 2 - medium.get_width() // 2, 380))
+        self.screen.blit(hard, (SCREEN_WIDTH // 2 - hard.get_width() // 2, 430))
+        self.screen.blit(impossible, (SCREEN_WIDTH // 2 - impossible.get_width() // 2, 480))
+
+        # Web version notice
+        web_notice = self.small_font.render("Web Version - Progress saves during session", True, LIGHT_BLUE)
+        self.screen.blit(web_notice, (SCREEN_WIDTH // 2 - web_notice.get_width() // 2, 530))
+
+        # Controls
+        controls = [
+            "WASD / Arrow Keys - Move | Mouse - Aim | Left Click - Shoot",
+            "Q - Switch Weapon | R - Reload | H - Medkit | ESC - Menu"
+        ]
+
+        y = 580
+        for ctrl in controls:
+            text = self.small_font.render(ctrl, True, GRAY)
+            self.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, y))
+            y += 30
+
+        # Map size info
+        map_info = self.small_font.render(f"Map Size: {MAP_WIDTH}x{MAP_HEIGHT}", True, LIGHT_BLUE)
+        self.screen.blit(map_info, (SCREEN_WIDTH // 2 - map_info.get_width() // 2, y + 20))
+
+        # Show logged in user or guest status
+        if current_user:
+            user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
+        else:
+            user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, y + 45))
+
+    def draw_gameover(self):
+        # Darken screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(180)
+        self.screen.blit(overlay, (0, 0))
+
+        # Result
+        if len(self.robots) == 0:
+            result = self.big_font.render("VICTORY!", True, GREEN)
+        else:
+            result = self.big_font.render("GAME OVER", True, RED)
+
+        self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 300))
+
+        # Score
+        score = self.font.render(f"Score: {self.score} | Kills: {self.kills}", True, WHITE)
+        self.screen.blit(score, (SCREEN_WIDTH // 2 - score.get_width() // 2, 400))
+
+        # Options
+        retry = self.small_font.render("[R] Play Again | [ESC] Menu", True, GRAY)
+        self.screen.blit(retry, (SCREEN_WIDTH // 2 - retry.get_width() // 2, 500))
+
+    def draw_shop(self):
+        # Darken screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(200)
+        self.screen.blit(overlay, (0, 0))
+
+        # Shop box
+        box_width = 600
+        box_height = 470
+        box_x = SCREEN_WIDTH // 2 - box_width // 2
+        box_y = SCREEN_HEIGHT // 2 - box_height // 2
+
+        pygame.draw.rect(self.screen, DARK_GRAY, (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, YELLOW, (box_x, box_y, box_width, box_height), 4)
+
+        # Title
+        title = self.big_font.render("SHOP", True, YELLOW)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, box_y + 15))
+
+        # Coins
+        coins = self.font.render(f"Your Coins: {self.player.coins}", True, GREEN)
+        self.screen.blit(coins, (SCREEN_WIDTH // 2 - coins.get_width() // 2, box_y + 70))
+
+        # Shop items
+        item_y = box_y + 115
+
+        # Item 1: Shotgun
+        if not self.player.has_shotgun:
+            shotgun_color = WHITE if self.player.coins >= 10 else GRAY
+            shotgun_text = self.font.render("[1] Shotgun - 10 coins", True, shotgun_color)
+            shotgun_desc = self.small_font.render("50 Damage close, 10 far | 30 Ammo", True, ORANGE)
+        else:
+            shotgun_text = self.font.render("[1] Shotgun - OWNED", True, GREEN)
+            shotgun_desc = self.small_font.render("Already unlocked!", True, GREEN)
+        self.screen.blit(shotgun_text, (box_x + 30, item_y))
+        self.screen.blit(shotgun_desc, (box_x + 30, item_y + 30))
+
+        # Item 2: RPG
+        item_y += 70
+        if not self.player.has_rpg:
+            rpg_color = WHITE if self.player.coins >= 50 else GRAY
+            rpg_text = self.font.render("[2] RPG - 50 coins", True, rpg_color)
+            rpg_desc = self.small_font.render("50 Damage | 5 Ammo | Very Slow", True, RED)
+        else:
+            rpg_text = self.font.render("[2] RPG - OWNED", True, GREEN)
+            rpg_desc = self.small_font.render("Already unlocked!", True, GREEN)
+        self.screen.blit(rpg_text, (box_x + 30, item_y))
+        self.screen.blit(rpg_desc, (box_x + 30, item_y + 30))
+
+        # Item 3: Medkit (can only buy once)
+        item_y += 70
+        if self.player.medkit_charges > 0:
+            medkit_text = self.font.render("[3] Medkit - OWNED", True, GREEN)
+            medkit_desc = self.small_font.render(f"You have {self.player.medkit_charges} charges | Press H to use", True, GREEN)
+        else:
+            medkit_color = WHITE if self.player.coins >= 90 else GRAY
+            medkit_text = self.font.render("[3] Medkit - 90 coins", True, medkit_color)
+            medkit_desc = self.small_font.render("Gives 2 heals | Press H to use", True, GREEN)
+        self.screen.blit(medkit_text, (box_x + 30, item_y))
+        self.screen.blit(medkit_desc, (box_x + 30, item_y + 30))
+
+        # Item 4: Sniper
+        item_y += 70
+        if not self.player.has_sniper:
+            sniper_color = WHITE if self.player.coins >= 150 else GRAY
+            sniper_text = self.font.render("[4] Sniper - 150 coins", True, sniper_color)
+            sniper_desc = self.small_font.render("150 Damage | 5 Ammo | Very Fast Bullet", True, (0, 255, 255))
+        else:
+            sniper_text = self.font.render("[4] Sniper - OWNED", True, GREEN)
+            sniper_desc = self.small_font.render("Already unlocked!", True, GREEN)
+        self.screen.blit(sniper_text, (box_x + 30, item_y))
+        self.screen.blit(sniper_desc, (box_x + 30, item_y + 30))
+
+        # Close option
+        close_text = self.font.render("[ESC] Close Shop", True, RED)
+        self.screen.blit(close_text, (SCREEN_WIDTH // 2 - close_text.get_width() // 2, box_y + 420))
+
+    def draw(self):
+        if self.state == "login":
+            self.draw_login_screen()
+
+        elif self.state == "menu":
+            self.draw_menu()
+
+        elif self.state == "playing" or self.state == "gameover" or self.state == "shop":
+            self.draw_background()
+
+            # Draw obstacles
+            for obs in self.obstacles:
+                obs.draw(self.screen, self.camera)
+
+            # Draw bullets
+            for bullet in self.bullets:
+                bullet.draw(self.screen, self.camera)
+
+            # Draw grenades
+            for grenade in self.grenades:
+                grenade.draw(self.screen, self.camera)
+
+            # Draw explosions
+            for explosion in self.explosions:
+                explosion.draw(self.screen, self.camera)
+
+            # Draw robots
+            for robot in self.robots:
+                robot.draw(self.screen, self.camera)
+
+            # Draw boss
+            if self.boss:
+                self.boss.draw(self.screen, self.camera)
+
+            # Draw shell casings (on ground, behind player)
+            for casing in self.shell_casings:
+                casing.draw(self.screen, self.camera)
+
+            # Draw player
+            self.player.draw(self.screen, self.camera)
+
+            # Draw muzzle flashes (in front of player)
+            for flash in self.muzzle_flashes:
+                flash.draw(self.screen, self.camera)
+
+            # Draw healing effects
+            for effect in self.healing_effects:
+                effect.draw(self.screen, self.camera)
+
+            # Draw HUD
+            self.draw_hud()
+
+            # Draw minimap
+            self.draw_minimap()
+
+            if self.state == "gameover":
+                self.draw_gameover()
+            elif self.state == "shop":
+                self.draw_shop()
+
+        pygame.display.flip()
+
+    async def run(self):
+        running = True
+        while running:
+            running = self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(60)
+            await asyncio.sleep(0)  # Required for Pygbag
+
+        pygame.quit()
+
+
+async def main():
+    print("=" * 50)
+    print("   ARENA SHOOTER 2D - ROBOT BATTLE")
+    print("=" * 50)
+    print(f"\nMap Size: {MAP_WIDTH}x{MAP_HEIGHT}")
+    print("Starting game...")
+
+    game = Game()
+    await game.run()
+
+
+# Pygbag entry point
+asyncio.run(main())
