@@ -302,6 +302,15 @@ SCREEN_HEIGHT = 720
 MAP_WIDTH = 5000
 MAP_HEIGHT = 5000
 
+# Mobile detection
+IS_MOBILE = False
+try:
+    from platform import window
+    # Check if touch is available or screen is small
+    IS_MOBILE = True  # Assume mobile in browser, show controls
+except:
+    pass
+
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -323,6 +332,114 @@ DIFFICULTY = {
     "hard": {"count": 25, "health": 100, "speed": 4, "damage": 15, "fire_rate": 40, "color": RED, "points": 300, "coins": 8},
     "impossible": {"count": 10, "health": 120, "speed": 5, "damage": 20, "fire_rate": 30, "color": (150, 0, 150), "points": 500, "coins": 15, "waves": 5, "has_boss": True}
 }
+
+
+class VirtualJoystick:
+    """Virtual joystick for mobile touch controls"""
+    def __init__(self, x, y, radius=60):
+        self.base_x = x
+        self.base_y = y
+        self.radius = radius
+        self.knob_radius = 25
+        self.knob_x = x
+        self.knob_y = y
+        self.active = False
+        self.touch_id = None
+        self.dx = 0  # -1 to 1
+        self.dy = 0  # -1 to 1
+
+    def handle_touch_down(self, x, y, touch_id):
+        dist = math.sqrt((x - self.base_x)**2 + (y - self.base_y)**2)
+        if dist < self.radius * 1.5:
+            self.active = True
+            self.touch_id = touch_id
+            self.update_knob(x, y)
+            return True
+        return False
+
+    def handle_touch_move(self, x, y, touch_id):
+        if self.active and touch_id == self.touch_id:
+            self.update_knob(x, y)
+            return True
+        return False
+
+    def handle_touch_up(self, touch_id):
+        if touch_id == self.touch_id:
+            self.active = False
+            self.touch_id = None
+            self.knob_x = self.base_x
+            self.knob_y = self.base_y
+            self.dx = 0
+            self.dy = 0
+            return True
+        return False
+
+    def update_knob(self, x, y):
+        dx = x - self.base_x
+        dy = y - self.base_y
+        dist = math.sqrt(dx**2 + dy**2)
+
+        if dist > self.radius:
+            dx = dx / dist * self.radius
+            dy = dy / dist * self.radius
+
+        self.knob_x = self.base_x + dx
+        self.knob_y = self.base_y + dy
+        self.dx = dx / self.radius
+        self.dy = dy / self.radius
+
+    def draw(self, screen):
+        # Draw base circle (semi-transparent)
+        base_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(base_surf, (100, 100, 100, 100), (self.radius, self.radius), self.radius)
+        pygame.draw.circle(base_surf, (150, 150, 150, 150), (self.radius, self.radius), self.radius, 3)
+        screen.blit(base_surf, (self.base_x - self.radius, self.base_y - self.radius))
+
+        # Draw knob
+        knob_surf = pygame.Surface((self.knob_radius * 2, self.knob_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(knob_surf, (200, 200, 200, 180), (self.knob_radius, self.knob_radius), self.knob_radius)
+        screen.blit(knob_surf, (self.knob_x - self.knob_radius, self.knob_y - self.knob_radius))
+
+
+class TouchButton:
+    """Touch button for mobile controls"""
+    def __init__(self, x, y, radius, label, color=(100, 100, 200)):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.label = label
+        self.color = color
+        self.pressed = False
+        self.touch_id = None
+
+    def handle_touch_down(self, x, y, touch_id):
+        dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
+        if dist < self.radius:
+            self.pressed = True
+            self.touch_id = touch_id
+            return True
+        return False
+
+    def handle_touch_up(self, touch_id):
+        if touch_id == self.touch_id:
+            self.pressed = False
+            self.touch_id = None
+            return True
+        return False
+
+    def draw(self, screen):
+        # Draw button (semi-transparent)
+        btn_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        color = (self.color[0], self.color[1], self.color[2], 180 if self.pressed else 120)
+        pygame.draw.circle(btn_surf, color, (self.radius, self.radius), self.radius)
+        border_color = (255, 255, 255, 200) if self.pressed else (200, 200, 200, 150)
+        pygame.draw.circle(btn_surf, border_color, (self.radius, self.radius), self.radius, 3)
+        screen.blit(btn_surf, (self.x - self.radius, self.y - self.radius))
+
+        # Draw label
+        font = pygame.font.Font(None, 24)
+        text = font.render(self.label, True, (255, 255, 255))
+        screen.blit(text, (self.x - text.get_width() // 2, self.y - text.get_height() // 2))
 
 
 class Camera:
@@ -2013,6 +2130,16 @@ class Game:
         self.menu_music = None
         self.current_music = None
 
+        # Mobile touch controls
+        self.mobile_controls = IS_MOBILE
+        self.joystick = VirtualJoystick(100, SCREEN_HEIGHT - 120, 60)
+        self.aim_joystick = VirtualJoystick(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120, 60)
+        self.shoot_btn = TouchButton(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 200, 35, "FIRE", (200, 60, 60))
+        self.reload_btn = TouchButton(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 220, 30, "R", (60, 150, 200))
+        self.switch_btn = TouchButton(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 140, 30, "Q", (150, 150, 60))
+        self.medkit_btn = TouchButton(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 60, 30, "H", (60, 200, 60))
+        self.touch_aim_angle = 0
+
         self.reset_game()
 
     def play_boss_music(self):
@@ -2177,10 +2304,70 @@ class Game:
                         elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
                             self.state = "shop"
 
+    def handle_touch_events(self, event):
+        """Handle touch/mouse events for mobile controls"""
+        if not self.mobile_controls or self.state != "playing":
+            return
+
+        touch_id = getattr(event, 'finger_id', 0)
+
+        if event.type == pygame.FINGERDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+                touch_id = 0
+
+            # Check joystick
+            self.joystick.handle_touch_down(x, y, touch_id)
+            # Check aim joystick
+            self.aim_joystick.handle_touch_down(x, y, touch_id + 100)
+            # Check buttons
+            self.shoot_btn.handle_touch_down(x, y, touch_id)
+            self.reload_btn.handle_touch_down(x, y, touch_id)
+            self.switch_btn.handle_touch_down(x, y, touch_id)
+            self.medkit_btn.handle_touch_down(x, y, touch_id)
+
+        elif event.type == pygame.FINGERMOTION or event.type == pygame.MOUSEMOTION:
+            if event.type == pygame.FINGERMOTION:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+                touch_id = 0
+                if not pygame.mouse.get_pressed()[0]:
+                    return
+
+            self.joystick.handle_touch_move(x, y, touch_id)
+            self.aim_joystick.handle_touch_move(x, y, touch_id + 100)
+
+        elif event.type == pygame.FINGERUP or event.type == pygame.MOUSEBUTTONUP:
+            self.joystick.handle_touch_up(touch_id)
+            self.aim_joystick.handle_touch_up(touch_id + 100)
+            # Handle button releases and actions
+            if self.reload_btn.pressed and self.reload_btn.touch_id == touch_id:
+                if not self.player.reloading:
+                    self.player.start_reload()
+            if self.switch_btn.pressed and self.switch_btn.touch_id == touch_id:
+                self.player.switch_weapon()
+            if self.medkit_btn.pressed and self.medkit_btn.touch_id == touch_id:
+                if self.player.use_medkit():
+                    self.healing_effects.append(HealingEffect(self.player.x, self.player.y))
+            self.shoot_btn.handle_touch_up(touch_id)
+            self.reload_btn.handle_touch_up(touch_id)
+            self.switch_btn.handle_touch_up(touch_id)
+            self.medkit_btn.handle_touch_up(touch_id)
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
+
+            # Handle touch events for mobile
+            if event.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP,
+                              pygame.MOUSEBUTTONDOWN, pygame.MOUSEMOTION, pygame.MOUSEBUTTONUP):
+                self.handle_touch_events(event)
 
             if event.type == pygame.KEYDOWN:
                 if self.state == "login":
@@ -2365,6 +2552,51 @@ class Game:
 
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
+
+        # Handle mobile joystick movement
+        if self.mobile_controls and self.joystick.active:
+            # Create fake keys dict based on joystick
+            class FakeKeys:
+                def __init__(self, dx, dy):
+                    self.dx = dx
+                    self.dy = dy
+                def __getitem__(self, key):
+                    if key == pygame.K_w or key == pygame.K_UP:
+                        return self.dy < -0.3
+                    if key == pygame.K_s or key == pygame.K_DOWN:
+                        return self.dy > 0.3
+                    if key == pygame.K_a or key == pygame.K_LEFT:
+                        return self.dx < -0.3
+                    if key == pygame.K_d or key == pygame.K_RIGHT:
+                        return self.dx > 0.3
+                    return False
+            keys = FakeKeys(self.joystick.dx, self.joystick.dy)
+
+        # Handle mobile aim joystick
+        if self.mobile_controls and self.aim_joystick.active:
+            # Calculate aim angle from joystick
+            if abs(self.aim_joystick.dx) > 0.1 or abs(self.aim_joystick.dy) > 0.1:
+                self.touch_aim_angle = math.atan2(self.aim_joystick.dy, self.aim_joystick.dx)
+                # Convert angle to screen position for player aim
+                aim_x = self.player.x - self.camera.x + math.cos(self.touch_aim_angle) * 100
+                aim_y = self.player.y - self.camera.y + math.sin(self.touch_aim_angle) * 100
+                mouse_pos = (aim_x, aim_y)
+
+        # Handle mobile shooting (continuous fire while button held)
+        if self.mobile_controls and self.shoot_btn.pressed:
+            # Use aim joystick direction or last known direction
+            if self.aim_joystick.active or (abs(self.aim_joystick.dx) > 0.1 or abs(self.aim_joystick.dy) > 0.1):
+                result = self.player.shoot()
+                if result:
+                    if isinstance(result, dict) and result.get("melee"):
+                        self.handle_melee_attack(result)
+                    else:
+                        self.bullets.append(result)
+                        # Add shell casing and muzzle flash
+                        if self.player.weapon.get("casing", True) and not self.player.weapon.get("melee"):
+                            self.shell_casings.append(ShellCasing(self.player.x, self.player.y, self.player.angle))
+                        if not self.player.weapon.get("melee"):
+                            self.muzzle_flashes.append(MuzzleFlash(self.player.x, self.player.y, self.player.angle))
 
         # Update player
         self.player.update(keys, mouse_pos, self.camera, self.obstacles)
@@ -3022,6 +3254,15 @@ class Game:
 
             # Draw minimap
             self.draw_minimap()
+
+            # Draw mobile controls
+            if self.mobile_controls and self.state == "playing":
+                self.joystick.draw(self.screen)
+                self.aim_joystick.draw(self.screen)
+                self.shoot_btn.draw(self.screen)
+                self.reload_btn.draw(self.screen)
+                self.switch_btn.draw(self.screen)
+                self.medkit_btn.draw(self.screen)
 
             if self.state == "gameover":
                 self.draw_gameover()
