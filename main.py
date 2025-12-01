@@ -2393,8 +2393,9 @@ class Game:
             self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
             self.player2 = None
 
-        # Enable split-screen for local multiplayer modes
-        if self.game_mode in ["coop", "pvp"]:
+        # Enable split-screen only for PvP mode (players need separate views to hide from each other)
+        # Co-op modes use shared screen with camera following midpoint between players
+        if self.game_mode == "pvp":
             self.split_screen = True
             half_width = SCREEN_WIDTH // 2
             self.camera = Camera(half_width, SCREEN_HEIGHT)
@@ -3336,7 +3337,7 @@ class Game:
             if self.player2:
                 self.camera2.update(self.player2.x, self.player2.y)
         elif self.player2 and self.player2.health > 0 and self.player.health > 0:
-            # Online modes: focus on midpoint between players
+            # Co-op modes (local and online): focus on midpoint between players
             mid_x = (self.player.x + self.player2.x) // 2
             mid_y = (self.player.y + self.player2.y) // 2
             self.camera.update(mid_x, mid_y)
