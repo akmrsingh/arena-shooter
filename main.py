@@ -2878,7 +2878,14 @@ class Game:
                         self.game_mode = "coop"
                         self.start_game("impossible")
                     elif event.key == pygame.K_0:
-                        # Online multiplayer menu
+                        # Online CO-OP menu
+                        self.online_game_mode = "coop"
+                        self.state = "online_menu"
+                        self.online_input_code = ""
+                        self.online_message = ""
+                    elif event.key == pygame.K_p:
+                        # Online PVP menu
+                        self.online_game_mode = "pvp"
                         self.state = "online_menu"
                         self.online_input_code = ""
                         self.online_message = ""
@@ -3852,6 +3859,25 @@ class Game:
                 next_wave_text = self.font.render("Wave Complete! Next wave incoming...", True, GREEN)
                 self.screen.blit(next_wave_text, (SCREEN_WIDTH // 2 - next_wave_text.get_width() // 2, 130))
 
+        # Show game mode and difficulty for online co-op
+        if self.game_mode == "online_coop":
+            mode_color = (100, 200, 255)  # Light blue for online
+            diff_display = self.online_difficulty.upper() if hasattr(self, 'online_difficulty') else self.difficulty.upper()
+            mode_text = self.small_font.render(f"ONLINE CO-OP | {diff_display}", True, mode_color)
+            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
+        elif self.game_mode == "online_pvp":
+            mode_color = (255, 100, 100)  # Light red for PvP
+            mode_text = self.small_font.render("ONLINE PVP", True, mode_color)
+            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
+        elif self.game_mode == "coop":
+            mode_color = (100, 255, 100)  # Light green for local co-op
+            mode_text = self.small_font.render(f"LOCAL CO-OP | {self.difficulty.upper()}", True, mode_color)
+            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
+        elif self.game_mode == "pvp":
+            mode_color = (255, 150, 100)  # Orange for local PvP
+            mode_text = self.small_font.render("LOCAL PVP", True, mode_color)
+            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
+
         # Reload hint
         if self.player.ammo == 0:
             reload_text = self.font.render("Press R to Reload!", True, RED)
@@ -4029,27 +4055,29 @@ class Game:
         online_header = self.font.render("-- ONLINE MULTIPLAYER --", True, (0, 200, 255))
         self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 510))
 
-        online_coop = self.small_font.render("[0] ONLINE - Play with friend on another device!", True, (0, 255, 200))
-        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 540))
+        online_coop = self.small_font.render("[0] ONLINE CO-OP - Team up vs robots", True, (0, 255, 200))
+        online_pvp = self.small_font.render("[P] ONLINE PVP - Fight each other", True, (255, 100, 150))
+        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 535))
+        self.screen.blit(online_pvp, (SCREEN_WIDTH // 2 - online_pvp.get_width() // 2, 557))
 
         # Map selection section
         map_header = self.small_font.render("-- MAP: [<] [>] --", True, GRAY)
-        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 575))
+        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 590))
 
         # Display current map with arrows
         map_display = self.font.render(f"< {self.selected_map.upper()} >", True, (100, 200, 255))
-        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 595))
+        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 610))
 
         # Show logged in user or guest status
         if current_user:
             user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
         else:
             user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 640))
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 655))
 
         # Controls hint
         controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
-        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 680))
+        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 690))
 
     def draw_gameover(self):
         # Darken screen
