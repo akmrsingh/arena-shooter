@@ -2985,12 +2985,12 @@ class Game:
                         self.state = "playing"
 
                 elif self.state == "online_menu":
-                    if event.key == pygame.K_1:
-                        # Select Co-op mode
+                    if event.key == pygame.K_1 and not self.online_input_active:
+                        # Select Co-op mode (only when not entering room code)
                         self.online_game_mode = "coop"
                         self.online_message = "CO-OP mode selected"
-                    elif event.key == pygame.K_2:
-                        # Select PvP mode
+                    elif event.key == pygame.K_2 and not self.online_input_active:
+                        # Select PvP mode (only when not entering room code)
                         self.online_game_mode = "pvp"
                         self.online_message = "1v1 PVP mode selected"
                     elif event.key == pygame.K_LEFT and self.online_game_mode == "coop":
@@ -3024,10 +3024,9 @@ class Game:
                         self.online_message = f"Joining room {self.online_input_code}..."
                         self.is_host = False
                         self.state = "waiting"
-                    elif event.unicode.isdigit() and len(self.online_input_code) < 4:
-                        # Only add to room code if not selecting mode (1 or 2)
-                        if event.key not in [pygame.K_1, pygame.K_2]:
-                            self.online_input_code += event.unicode
+                    elif event.unicode.isdigit() and len(self.online_input_code) < 4 and self.online_input_active:
+                        # Add digit to room code when in input mode
+                        self.online_input_code += event.unicode
 
                 elif self.state == "waiting":
                     if event.key == pygame.K_ESCAPE:
