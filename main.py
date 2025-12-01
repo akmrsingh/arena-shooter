@@ -302,12 +302,16 @@ SCREEN_HEIGHT = 720
 MAP_WIDTH = 5000
 MAP_HEIGHT = 5000
 
-# Mobile detection
+# Mobile detection - check for actual mobile devices, not just browser
 IS_MOBILE = False
 try:
     from platform import window
-    # Check if touch is available or screen is small
-    IS_MOBILE = True  # Assume mobile in browser, show controls
+    # Check user agent for mobile devices
+    user_agent = window.navigator.userAgent.lower()
+    is_touch = hasattr(window, 'ontouchstart') or window.navigator.maxTouchPoints > 0
+    is_mobile_ua = any(x in user_agent for x in ['android', 'iphone', 'ipad', 'ipod', 'mobile', 'tablet'])
+    # Only enable mobile controls if it's actually a mobile/tablet device
+    IS_MOBILE = is_mobile_ua and is_touch
 except:
     pass
 
@@ -3756,7 +3760,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.3", True, WHITE)
+        version = self.font.render("v2.4", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3917,7 +3921,7 @@ class Game:
         self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
 
         # Version
-        version = self.small_font.render("v2.3", True, WHITE)
+        version = self.small_font.render("v2.4", True, WHITE)
         self.screen.blit(version, (10, 10))
 
     def draw_waiting_screen(self):
