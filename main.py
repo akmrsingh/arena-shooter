@@ -3078,11 +3078,9 @@ class Game:
             if not hasattr(window, 'MP'):
                 return
 
-            # Determine which player we control (host = player1, joiner = player2)
-            if self.is_host:
-                player = self.player
-            else:
-                player = self.player2
+            # In online co-op, both players control self.player with WASD/mouse
+            # We send OUR player data to the other person (shows as player2 on their screen)
+            player = self.player
 
             if not player:
                 return
@@ -3122,11 +3120,8 @@ class Game:
                 try:
                     state = json.loads(data_str)
 
-                    # Update the remote player (host updates player2, joiner updates player)
-                    if self.is_host:
-                        remote = self.player2
-                    else:
-                        remote = self.player
+                    # Remote player's data shows as player2 on our screen
+                    remote = self.player2
 
                     if remote:
                         remote.x = state.get("x", remote.x)
@@ -3214,10 +3209,11 @@ class Game:
         self.player.update_reload()  # Update reload animation
 
         # Update Player 2 (in multiplayer modes)
-        if self.player2 and self.player2.health > 0:
+        # In online_coop, player2 is controlled by network data, not local input
+        if self.player2 and self.player2.health > 0 and self.game_mode != "online_coop":
             # In co-op, Player 2 aims at nearest robot; in PvP, aim at Player 1
             target_pos = None
-            if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.robots:
+            if self.game_mode == "coop" and self.robots:
                 # Find nearest robot
                 nearest_dist = float('inf')
                 for robot in self.robots:
@@ -3760,7 +3756,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.4", True, WHITE)
+        version = self.font.render("v2.5", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3921,7 +3917,7 @@ class Game:
         self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
 
         # Version
-        version = self.small_font.render("v2.4", True, WHITE)
+        version = self.small_font.render("v2.5", True, WHITE)
         self.screen.blit(version, (10, 10))
 
     def draw_waiting_screen(self):
