@@ -2258,15 +2258,27 @@ class Game:
         self.big_font = pygame.font.Font(None, 72)
         self.small_font = pygame.font.Font(None, 32)
 
-        self.state = "login"  # login, menu, playing, gameover, shop
+        self.state = "login"  # login, menu, playing, gameover, shop, online_menu, waiting
         self.difficulty = "medium"
-        self.game_mode = "solo"  # "solo", "pvp", "coop"
+        self.game_mode = "solo"  # "solo", "pvp", "coop", "online_coop", "online_pvp"
         self.selected_map = "random"  # Map selection: random, arena, corridors, fortress, open
         self.map_names = ["random", "arena", "corridors", "fortress", "open"]
         self.map_index = 0
         self.camera = Camera()
         self.shop_prompted = False  # Track if we already asked about RPG
         self.pvp_winner = None  # Track winner in PvP mode
+
+        # Online multiplayer state
+        self.online_room_code = ""
+        self.online_input_code = ""
+        self.online_status = "disconnected"  # disconnected, connecting, connected
+        self.is_host = False
+        self.online_message = ""
+        self.last_sync_time = 0
+        self.remote_player_data = None
+        self.online_input_active = False
+        self.online_hosting_started = False
+        self.online_joining_started = False
 
         # Login system
         self.username_input = ""
@@ -2318,8 +2330,9 @@ class Game:
         if self.game_mode == "pvp":
             self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
             self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
-        elif self.game_mode == "coop":
+        elif self.game_mode == "coop" or self.game_mode == "online_coop":
             self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
+            # In online_coop, player2 is controlled by remote player
             self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
         else:
             self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
@@ -2789,6 +2802,11 @@ class Game:
                         # Co-op hard mode
                         self.game_mode = "coop"
                         self.start_game("hard")
+                    elif event.key == pygame.K_8:
+                        # Online multiplayer menu
+                        self.state = "online_menu"
+                        self.online_input_code = ""
+                        self.online_message = ""
                     elif event.key == pygame.K_l:
                         # L key - Login/Logout
                         if current_user:
@@ -2884,6 +2902,38 @@ class Game:
                         self.shop_prompted = True
                         self.state = "playing"
 
+                elif self.state == "online_menu":
+                    if event.key == pygame.K_h:
+                        # Host a game
+                        self.online_message = "Creating room..."
+                        self.is_host = True
+                        self.state = "waiting"
+                        # Will call JS to host game in update loop
+                    elif event.key == pygame.K_j:
+                        # Join a game - switch to input mode
+                        self.online_message = "Enter room code:"
+                        self.online_input_active = True
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "menu"
+                        self.online_message = ""
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.online_input_code = self.online_input_code[:-1]
+                    elif event.key == pygame.K_RETURN and len(self.online_input_code) == 4:
+                        # Join with entered code
+                        self.online_message = f"Joining room {self.online_input_code}..."
+                        self.is_host = False
+                        self.state = "waiting"
+                    elif event.unicode.isdigit() and len(self.online_input_code) < 4:
+                        self.online_input_code += event.unicode
+
+                elif self.state == "waiting":
+                    if event.key == pygame.K_ESCAPE:
+                        # Cancel and disconnect
+                        self.state = "menu"
+                        self.online_status = "disconnected"
+                        self.online_message = ""
+                        self.online_room_code = ""
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1 and self.state == "login":
                     # Handle clicks on login input fields
@@ -2956,9 +3006,155 @@ class Game:
         recoil = recoil_amounts.get(weapon_name, 2)
         self.player.apply_recoil(recoil)
 
+    def update_online_connection(self):
+        """Handle online multiplayer connection state"""
+        try:
+            import platform
+            window = platform.window
+        except:
+            self.online_message = "Online only available in web version"
+            return
+
+        # Check if MP (multiplayer) object exists
+        if not hasattr(window, 'MP'):
+            self.online_message = "Multiplayer loading..."
+            return
+
+        # Host game
+        if self.is_host and not self.online_hosting_started:
+            self.online_hosting_started = True
+            self.online_status = "connecting"
+            self.online_message = "Creating room..."
+            # Call JavaScript to host
+            try:
+                result = window.MP.hostGame()
+                # Result is a promise, we'll check status each frame
+            except Exception as e:
+                self.online_message = f"Error: {str(e)}"
+
+        # Join game
+        elif not self.is_host and not self.online_joining_started and self.online_input_code:
+            self.online_joining_started = True
+            self.online_status = "connecting"
+            self.online_message = f"Joining room {self.online_input_code}..."
+            try:
+                window.MP.joinGame(self.online_input_code)
+            except Exception as e:
+                self.online_message = f"Error: {str(e)}"
+
+        # Check connection status from JavaScript
+        try:
+            status = window.MP.getConnectionStatus()
+            self.online_status = status
+
+            if self.is_host:
+                room_code = window.MP.getRoomCode()
+                if room_code:
+                    self.online_room_code = room_code
+                    self.online_message = "Waiting for player to join..."
+
+            if status == "connected":
+                self.online_message = "Connected! Starting game..."
+                # Start the game in online co-op mode
+                self.game_mode = "online_coop"
+                self.start_game("medium")
+                # Reset online state flags for next time
+                self.online_hosting_started = False
+                self.online_joining_started = False
+        except Exception as e:
+            pass  # Status check failed, will retry next frame
+
+    def send_game_state(self):
+        """Send local player state to remote player"""
+        try:
+            import platform
+            import json
+            window = platform.window
+
+            if not hasattr(window, 'MP'):
+                return
+
+            # Determine which player we control (host = player1, joiner = player2)
+            if self.is_host:
+                player = self.player
+            else:
+                player = self.player2
+
+            if not player:
+                return
+
+            # Build state to send
+            state = {
+                "x": player.x,
+                "y": player.y,
+                "angle": player.angle,
+                "health": player.health,
+                "weapon_idx": player.weapon_idx if hasattr(player, 'weapon_idx') else 0,
+                "shooting": pygame.mouse.get_pressed()[0]
+            }
+
+            window.MP.sendData(json.dumps(state))
+        except Exception as e:
+            pass
+
+    def receive_game_state(self):
+        """Receive remote player state and update"""
+        try:
+            import platform
+            import json
+            window = platform.window
+
+            if not hasattr(window, 'MP'):
+                return
+
+            # Get received data from JavaScript
+            data_list = window.MP.getReceivedData()
+
+            if not data_list:
+                return
+
+            # Process latest state (skip older states)
+            for data_str in data_list:
+                try:
+                    state = json.loads(data_str)
+
+                    # Update the remote player (host updates player2, joiner updates player)
+                    if self.is_host:
+                        remote = self.player2
+                    else:
+                        remote = self.player
+
+                    if remote:
+                        remote.x = state.get("x", remote.x)
+                        remote.y = state.get("y", remote.y)
+                        remote.angle = state.get("angle", remote.angle)
+                        # Don't sync health directly, let damage happen locally
+
+                        # Handle remote shooting
+                        if state.get("shooting") and hasattr(remote, 'shoot'):
+                            if not remote.weapon.get("melee", False):
+                                result = remote.shoot()
+                                if result:
+                                    self.bullets.append(result)
+
+                except json.JSONDecodeError:
+                    pass
+        except Exception as e:
+            pass
+
     def update(self):
+        # Handle waiting state for online multiplayer
+        if self.state == "waiting":
+            self.update_online_connection()
+            return
+
         if self.state != "playing":
             return
+
+        # Handle online multiplayer sync
+        if self.game_mode == "online_coop":
+            self.send_game_state()
+            self.receive_game_state()
 
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
@@ -3017,7 +3213,7 @@ class Game:
         if self.player2 and self.player2.health > 0:
             # In co-op, Player 2 aims at nearest robot; in PvP, aim at Player 1
             target_pos = None
-            if self.game_mode == "coop" and self.robots:
+            if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.robots:
                 # Find nearest robot
                 nearest_dist = float('inf')
                 for robot in self.robots:
@@ -3139,7 +3335,7 @@ class Game:
                 dist = math.sqrt((bullet.x - self.player.x)**2 + (bullet.y - self.player.y)**2)
                 if dist < self.player.radius + bullet.radius:
                     if self.player.take_damage(bullet.damage):
-                        if self.game_mode == "coop" and self.player2 and self.player2.health > 0:
+                        if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
                             pass  # Player 2 still alive, continue
                         else:
                             self.state = "gameover"
@@ -3147,7 +3343,7 @@ class Game:
                     hit_player = True
 
                 # Check Player 2 (in co-op)
-                if not hit_player and self.game_mode == "coop" and self.player2 and self.player2.health > 0:
+                if not hit_player and (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
                     dist = math.sqrt((bullet.x - self.player2.x)**2 + (bullet.y - self.player2.y)**2)
                     if dist < self.player2.radius + bullet.radius:
                         if self.player2.take_damage(bullet.damage):
@@ -3560,7 +3756,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.2", True, WHITE)
+        version = self.font.render("v2.3", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3585,41 +3781,42 @@ class Game:
         self.screen.blit(impossible, (SCREEN_WIDTH // 2 - impossible.get_width() // 2, 330))
 
         # Multiplayer section
-        multi_header = self.font.render("-- 2 PLAYER MODES --", True, ORANGE)
-        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 380))
+        multi_header = self.font.render("-- 2 PLAYER (SAME DEVICE) --", True, ORANGE)
+        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 370))
 
-        pvp = self.small_font.render("[5] PvP - Player vs Player (1v1 Battle)", True, (255, 100, 100))
-        coop = self.small_font.render("[6] CO-OP - Team up vs Robots (Medium)", True, (100, 255, 100))
-        coop_hard = self.small_font.render("[7] CO-OP HARD - Team up vs Robots (Hard)", True, (255, 200, 100))
+        pvp = self.small_font.render("[5] PvP - 1v1 Battle", True, (255, 100, 100))
+        coop = self.small_font.render("[6] CO-OP Medium", True, (100, 255, 100))
+        coop_hard = self.small_font.render("[7] CO-OP Hard", True, (255, 200, 100))
 
-        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 420))
-        self.screen.blit(coop, (SCREEN_WIDTH // 2 - coop.get_width() // 2, 450))
-        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 480))
+        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 400))
+        self.screen.blit(coop, (SCREEN_WIDTH // 2 - coop.get_width() // 2, 425))
+        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 450))
+
+        # Online Multiplayer section
+        online_header = self.font.render("-- ONLINE MULTIPLAYER --", True, (0, 200, 255))
+        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 485))
+
+        online_coop = self.small_font.render("[8] ONLINE CO-OP - Play with friend on another device!", True, (0, 255, 200))
+        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 515))
 
         # Map selection section
-        map_header = self.small_font.render("-- MAP: Use [<] [>] to change --", True, GRAY)
-        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 510))
+        map_header = self.small_font.render("-- MAP: [<] [>] --", True, GRAY)
+        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 555))
 
         # Display current map with arrows
         map_display = self.font.render(f"< {self.selected_map.upper()} >", True, (100, 200, 255))
-        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 535))
-
-        # Controls section
-        controls_header = self.small_font.render("-- CONTROLS --", True, GRAY)
-        self.screen.blit(controls_header, (SCREEN_WIDTH // 2 - controls_header.get_width() // 2, 575))
-
-        p1_controls = self.small_font.render("P1: WASD | Mouse | Click | Q/R", True, BLUE)
-        p2_controls = self.small_font.render("P2: IJKL | NumPad | O | U/P", True, (255, 150, 150))
-
-        self.screen.blit(p1_controls, (SCREEN_WIDTH // 2 - p1_controls.get_width() // 2, 600))
-        self.screen.blit(p2_controls, (SCREEN_WIDTH // 2 - p2_controls.get_width() // 2, 625))
+        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 575))
 
         # Show logged in user or guest status
         if current_user:
             user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
         else:
             user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 660))
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 620))
+
+        # Controls hint
+        controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
+        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 680))
 
     def draw_gameover(self):
         # Darken screen
@@ -3634,11 +3831,14 @@ class Game:
             subtitle = self.font.render("PvP Battle Complete", True, YELLOW)
             self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 280))
             self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 360))
-        elif self.game_mode == "coop":
-            # Co-op mode
+        elif self.game_mode == "coop" or self.game_mode == "online_coop":
+            # Co-op mode (local or online)
             if len(self.robots) == 0:
                 result = self.big_font.render("VICTORY!", True, GREEN)
-                subtitle = self.font.render("Team Win! Great Teamwork!", True, GREEN)
+                if self.game_mode == "online_coop":
+                    subtitle = self.font.render("Online Team Win!", True, GREEN)
+                else:
+                    subtitle = self.font.render("Team Win! Great Teamwork!", True, GREEN)
             else:
                 result = self.big_font.render("GAME OVER", True, RED)
                 subtitle = self.font.render("Both players defeated!", True, RED)
@@ -3661,6 +3861,104 @@ class Game:
         # Options
         retry = self.small_font.render("[R] Play Again | [ESC] Menu", True, GRAY)
         self.screen.blit(retry, (SCREEN_WIDTH // 2 - retry.get_width() // 2, 500))
+
+    def draw_online_menu(self):
+        # Background
+        self.screen.fill((20, 20, 40))
+
+        # Title
+        title = self.big_font.render("ONLINE MULTIPLAYER", True, (0, 200, 255))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
+
+        # Box
+        box_width = 500
+        box_height = 350
+        box_x = SCREEN_WIDTH // 2 - box_width // 2
+        box_y = 150
+
+        pygame.draw.rect(self.screen, (40, 40, 60), (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, (0, 200, 255), (box_x, box_y, box_width, box_height), 3)
+
+        # Options
+        host_text = self.font.render("[H] HOST GAME", True, GREEN)
+        host_desc = self.small_font.render("Create a room and share code with friend", True, GRAY)
+        self.screen.blit(host_text, (box_x + 30, box_y + 40))
+        self.screen.blit(host_desc, (box_x + 30, box_y + 75))
+
+        join_text = self.font.render("[J] JOIN GAME", True, YELLOW)
+        join_desc = self.small_font.render("Enter 4-digit room code to join friend", True, GRAY)
+        self.screen.blit(join_text, (box_x + 30, box_y + 130))
+        self.screen.blit(join_desc, (box_x + 30, box_y + 165))
+
+        # Room code input (if joining)
+        if self.online_input_active or len(self.online_input_code) > 0:
+            code_label = self.font.render("Room Code:", True, WHITE)
+            self.screen.blit(code_label, (box_x + 30, box_y + 220))
+
+            # Code input box
+            code_box = pygame.Rect(box_x + 180, box_y + 215, 150, 40)
+            pygame.draw.rect(self.screen, (60, 60, 80), code_box)
+            pygame.draw.rect(self.screen, YELLOW, code_box, 2)
+
+            code_text = self.big_font.render(self.online_input_code, True, WHITE)
+            self.screen.blit(code_text, (code_box.x + 20, code_box.y + 5))
+
+            if len(self.online_input_code) == 4:
+                enter_hint = self.small_font.render("Press ENTER to join", True, GREEN)
+                self.screen.blit(enter_hint, (box_x + 180, box_y + 260))
+
+        # Message
+        if self.online_message:
+            msg = self.font.render(self.online_message, True, ORANGE)
+            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, box_y + 290))
+
+        # Back option
+        back_text = self.small_font.render("[ESC] Back to Menu", True, RED)
+        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
+
+        # Version
+        version = self.small_font.render("v2.3", True, WHITE)
+        self.screen.blit(version, (10, 10))
+
+    def draw_waiting_screen(self):
+        # Background
+        self.screen.fill((20, 20, 40))
+
+        # Title
+        if self.is_host:
+            title = self.big_font.render("HOSTING GAME", True, GREEN)
+        else:
+            title = self.big_font.render("JOINING GAME", True, YELLOW)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 120))
+
+        # Room code display (for host)
+        if self.is_host and self.online_room_code:
+            code_label = self.font.render("Room Code:", True, WHITE)
+            self.screen.blit(code_label, (SCREEN_WIDTH // 2 - code_label.get_width() // 2, 200))
+
+            code_text = self.big_font.render(self.online_room_code, True, (0, 255, 200))
+            self.screen.blit(code_text, (SCREEN_WIDTH // 2 - code_text.get_width() // 2, 240))
+
+            share_text = self.small_font.render("Share this code with your friend!", True, GRAY)
+            self.screen.blit(share_text, (SCREEN_WIDTH // 2 - share_text.get_width() // 2, 300))
+
+        # Status message
+        status_text = self.font.render(self.online_message, True, ORANGE)
+        self.screen.blit(status_text, (SCREEN_WIDTH // 2 - status_text.get_width() // 2, 360))
+
+        # Connection status indicator
+        if self.online_status == "connecting":
+            # Animated dots
+            dots = "." * ((pygame.time.get_ticks() // 500) % 4)
+            waiting = self.font.render(f"Waiting{dots}", True, YELLOW)
+            self.screen.blit(waiting, (SCREEN_WIDTH // 2 - waiting.get_width() // 2, 420))
+        elif self.online_status == "connected":
+            connected = self.font.render("Connected! Starting game...", True, GREEN)
+            self.screen.blit(connected, (SCREEN_WIDTH // 2 - connected.get_width() // 2, 420))
+
+        # Cancel option
+        cancel_text = self.small_font.render("[ESC] Cancel", True, RED)
+        self.screen.blit(cancel_text, (SCREEN_WIDTH // 2 - cancel_text.get_width() // 2, 500))
 
     def draw_shop(self):
         # Darken screen
@@ -3746,6 +4044,12 @@ class Game:
 
         elif self.state == "menu":
             self.draw_menu()
+
+        elif self.state == "online_menu":
+            self.draw_online_menu()
+
+        elif self.state == "waiting":
+            self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop":
             self.draw_background()
