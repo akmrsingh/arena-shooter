@@ -3433,7 +3433,10 @@ class Game:
                     self.stop_music()
 
         # Check win conditions
-        if self.difficulty == "impossible":
+        # Skip robot-based win condition in PvP (no robots in PvP)
+        if self.game_mode == "pvp":
+            pass  # PvP win is determined by player death, not robot count
+        elif self.difficulty == "impossible":
             # Wave-based win condition
             if len(self.robots) == 0 and self.boss is None:
                 if self.current_wave < self.max_waves:
@@ -3756,7 +3759,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.6", True, WHITE)
+        version = self.font.render("v2.7", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3917,7 +3920,7 @@ class Game:
         self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
 
         # Version
-        version = self.small_font.render("v2.6", True, WHITE)
+        version = self.small_font.render("v2.7", True, WHITE)
         self.screen.blit(version, (10, 10))
 
     def draw_waiting_screen(self):
