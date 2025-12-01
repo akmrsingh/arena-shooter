@@ -2737,14 +2737,17 @@ class Game:
                             if success:
                                 # Auto-login after register
                                 login_user(self.username_input, self.passcode_input)
+                                pygame.key.stop_text_input()
                                 self.state = "menu"
                         else:
                             success, msg = login_user(self.username_input, self.passcode_input)
                             self.login_message = msg
                             if success:
+                                pygame.key.stop_text_input()
                                 self.state = "menu"
                     elif event.key == pygame.K_ESCAPE:
                         # Play as guest (skip login)
+                        pygame.key.stop_text_input()
                         self.state = "menu"
                     elif event.key == pygame.K_BACKSPACE:
                         # Delete character
@@ -2882,7 +2885,23 @@ class Game:
                         self.state = "playing"
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1 and self.state == "playing":
+                if event.button == 1 and self.state == "login":
+                    # Handle clicks on login input fields
+                    mouse_pos = pygame.mouse.get_pos()
+                    box_width = 450
+                    box_x = SCREEN_WIDTH // 2 - box_width // 2
+                    box_y = 200
+                    # Username field area
+                    username_rect = pygame.Rect(box_x + 25, box_y + 95, box_width - 50, 35)
+                    # Passcode field area
+                    passcode_rect = pygame.Rect(box_x + 25, box_y + 175, box_width - 50, 35)
+                    if username_rect.collidepoint(mouse_pos):
+                        self.active_input = "username"
+                        pygame.key.start_text_input()
+                    elif passcode_rect.collidepoint(mouse_pos):
+                        self.active_input = "passcode"
+                        pygame.key.start_text_input()
+                elif event.button == 1 and self.state == "playing":
                     # Check if shop button clicked
                     mouse_pos = pygame.mouse.get_pos()
                     if hasattr(self, 'shop_btn_rect') and self.shop_btn_rect.collidepoint(mouse_pos):
@@ -3455,6 +3474,8 @@ class Game:
 
     def draw_login_screen(self):
         """Draw login/register screen"""
+        # Enable text input for mobile keyboard
+        pygame.key.start_text_input()
         self.screen.fill(DARK_GRAY)
 
         # Title
@@ -3539,7 +3560,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.1", True, WHITE)
+        version = self.font.render("v2.2", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
