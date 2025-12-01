@@ -1781,8 +1781,8 @@ class Player:
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
 
-        # Body (flash white when hit)
-        body_color = WHITE if self.hit_flash > 0 else BLUE
+        # Body (flash white when hit) - Player 1 is light blue
+        body_color = WHITE if self.hit_flash > 0 else LIGHT_BLUE
         pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
         pygame.draw.circle(screen, WHITE, (int(sx), int(sy)), self.radius, 2)
 
@@ -2114,8 +2114,8 @@ class Player2(Player):
 
     def __init__(self, x, y):
         super().__init__(x, y)
-        # Player 2 uses different color
-        self.player_color = (255, 100, 100)  # Red-ish color
+        # Player 2 uses dark blue color
+        self.player_color = (30, 60, 150)  # Dark blue
         self.aim_direction = 0  # Aim angle controlled by numpad
         # Player 2 doesn't load saved progress (fresh start for fairness in PvP)
         self.coins = 0
@@ -3499,7 +3499,7 @@ class Game:
         # Draw player
         px = map_x + int(self.player.x * scale)
         py = map_y + int(self.player.y * scale)
-        pygame.draw.circle(self.screen, BLUE, (px, py), 4)
+        pygame.draw.circle(self.screen, LIGHT_BLUE, (px, py), 4)
 
         # Draw boss on minimap (purple, bigger)
         if self.boss:
@@ -3523,7 +3523,7 @@ class Game:
 
         # P1 label in multiplayer
         if self.player2:
-            p1_label = self.small_font.render("P1", True, BLUE)
+            p1_label = self.small_font.render("P1", True, LIGHT_BLUE)
             self.screen.blit(p1_label, (bar_x, bar_y - 18))
 
         pygame.draw.rect(self.screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
@@ -3756,7 +3756,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.5", True, WHITE)
+        version = self.font.render("v2.6", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3917,7 +3917,7 @@ class Game:
         self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
 
         # Version
-        version = self.small_font.render("v2.5", True, WHITE)
+        version = self.small_font.render("v2.6", True, WHITE)
         self.screen.blit(version, (10, 10))
 
     def draw_waiting_screen(self):
