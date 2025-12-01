@@ -24,7 +24,13 @@ jobs:
 
       - name: Build with Pygbag
         run: |
+          mkdir -p build/web
           pygbag --build main.py
+
+      - name: Verify build
+        run: |
+          ls -la build/web/
+          unzip -l build/web/*.apk
 
       - name: Install Butler
         uses: jdno/setup-butler@v1
