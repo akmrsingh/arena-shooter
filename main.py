@@ -448,18 +448,20 @@ class TouchButton:
 
 
 class Camera:
-    def __init__(self):
+    def __init__(self, view_width=SCREEN_WIDTH, view_height=SCREEN_HEIGHT):
         self.x = 0
         self.y = 0
+        self.view_width = view_width
+        self.view_height = view_height
 
     def update(self, target_x, target_y):
         # Center camera on target
-        self.x = target_x - SCREEN_WIDTH // 2
-        self.y = target_y - SCREEN_HEIGHT // 2
+        self.x = target_x - self.view_width // 2
+        self.y = target_y - self.view_height // 2
 
         # Keep camera in bounds
-        self.x = max(0, min(MAP_WIDTH - SCREEN_WIDTH, self.x))
-        self.y = max(0, min(MAP_HEIGHT - SCREEN_HEIGHT, self.y))
+        self.x = max(0, min(MAP_WIDTH - self.view_width, self.x))
+        self.y = max(0, min(MAP_HEIGHT - self.view_height, self.y))
 
     def apply(self, x, y):
         return x - self.x, y - self.y
@@ -911,6 +913,9 @@ class Robot:
         self.knife_damage = 15
         self.knife_range = 50
         self.knife_only = knife_only  # If True, this robot only uses knife
+        self.headshot_radius = 8  # Red dot target size for sniper headshots
+        self.headshot_offset_y = -35  # Position above robot (above health bar)
+        self.show_sniper_target = False  # Whether to show red dot (set by game when sniper is equipped)
 
     def get_patrol_target(self):
         margin = 100
@@ -1036,6 +1041,15 @@ class Robot:
         self.hit_flash = 10
         return self.health <= 0
 
+    def check_headshot(self, bullet_x, bullet_y):
+        """Check if bullet hits the headshot target (red dot above robot)"""
+        headshot_x = self.x
+        headshot_y = self.y + self.headshot_offset_y
+        dx = bullet_x - headshot_x
+        dy = bullet_y - headshot_y
+        dist = math.sqrt(dx*dx + dy*dy)
+        return dist < self.headshot_radius + 5  # 5 is bullet radius
+
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
 
@@ -1096,6 +1110,15 @@ class Robot:
             pygame.draw.rect(screen, health_color, (bar_x, bar_y, health_width, bar_height))
             pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
 
+            # Sniper headshot target (red dot above health bar) - only shows when sniper is equipped
+            if self.show_sniper_target:
+                headshot_x = int(sx)
+                headshot_y = int(sy + self.headshot_offset_y)
+                # Outer ring
+                pygame.draw.circle(screen, (200, 0, 0), (headshot_x, headshot_y), self.headshot_radius, 2)
+                # Inner dot
+                pygame.draw.circle(screen, RED, (headshot_x, headshot_y), 4)
+
 
 class Boss:
     def __init__(self, x, y):
@@ -1114,6 +1137,9 @@ class Boss:
         self.charge_speed = 8
         self.is_charging = False
         self.charge_target = None
+        self.headshot_radius = 12  # Bigger target for boss
+        self.headshot_offset_y = -70  # Position above boss
+        self.show_sniper_target = False  # Whether to show red dot (set by game when sniper is equipped)
 
     def update(self, player_x, player_y, obstacles):
         dx = player_x - self.x
@@ -1188,6 +1214,15 @@ class Boss:
         self.hit_flash = 10
         return self.health <= 0
 
+    def check_headshot(self, bullet_x, bullet_y):
+        """Check if bullet hits the headshot target (red dot above boss)"""
+        headshot_x = self.x
+        headshot_y = self.y + self.headshot_offset_y
+        dx = bullet_x - headshot_x
+        dy = bullet_y - headshot_y
+        dist = math.sqrt(dx*dx + dy*dy)
+        return dist < self.headshot_radius + 5  # 5 is bullet radius
+
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
 
@@ -1212,6 +1247,15 @@ class Boss:
             gun_x = sx + math.cos(self.angle) * gun_length
             gun_y = sy + math.sin(self.angle) * gun_length
             pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 12)
+
+            # Sniper headshot target (bigger red dot for boss) - only shows when sniper is equipped
+            if self.show_sniper_target:
+                headshot_x = int(sx)
+                headshot_y = int(sy + self.headshot_offset_y)
+                # Outer ring
+                pygame.draw.circle(screen, (200, 0, 0), (headshot_x, headshot_y), self.headshot_radius, 3)
+                # Inner dot
+                pygame.draw.circle(screen, RED, (headshot_x, headshot_y), 6)
 
             # Health bar (bigger, at top of screen when boss is active)
             bar_width = 400
@@ -2269,6 +2313,8 @@ class Game:
         self.map_names = ["random", "arena", "corridors", "fortress", "open"]
         self.map_index = 0
         self.camera = Camera()
+        self.camera2 = Camera()  # Second camera for split-screen
+        self.split_screen = False  # Enable split-screen for local multiplayer
         self.shop_prompted = False  # Track if we already asked about RPG
         self.pvp_winner = None  # Track winner in PvP mode
 
@@ -2283,6 +2329,10 @@ class Game:
         self.online_input_active = False
         self.online_hosting_started = False
         self.online_joining_started = False
+        self.online_game_mode = "coop"  # "coop" or "pvp" for online games
+        self.online_difficulty = "medium"  # Difficulty for online co-op
+        self.online_difficulty_options = ["easy", "medium", "hard", "impossible"]
+        self.online_difficulty_index = 1  # Default to medium
 
         # Login system
         self.username_input = ""
@@ -2331,16 +2381,29 @@ class Game:
 
     def reset_game(self):
         # Player 1 starts on left side, Player 2 on right side (for PvP/coop)
-        if self.game_mode == "pvp":
+        if self.game_mode in ["pvp", "online_pvp"]:
+            # PvP modes - players on opposite sides
             self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
             self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
-        elif self.game_mode == "coop" or self.game_mode == "online_coop":
+        elif self.game_mode in ["coop", "online_coop"]:
             self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
             # In online_coop, player2 is controlled by remote player
             self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
         else:
             self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
             self.player2 = None
+
+        # Enable split-screen for local multiplayer modes
+        if self.game_mode in ["coop", "pvp"]:
+            self.split_screen = True
+            half_width = SCREEN_WIDTH // 2
+            self.camera = Camera(half_width, SCREEN_HEIGHT)
+            self.camera2 = Camera(half_width, SCREEN_HEIGHT)
+        else:
+            self.split_screen = False
+            self.camera = Camera()
+            self.camera2 = Camera()
+
         self.pvp_winner = None
         self.robots = []
         self.bullets = []
@@ -2639,7 +2702,7 @@ class Game:
         damage = attack["damage"]
 
         # In PvP mode, can hit player 1
-        if self.game_mode == "pvp" and self.player.health > 0:
+        if self.game_mode in ["pvp", "online_pvp"] and self.player.health > 0:
             dx = self.player.x - px
             dy = self.player.y - py
             dist = math.sqrt(dx*dx + dy*dy)
@@ -2799,14 +2862,22 @@ class Game:
                         self.game_mode = "pvp"
                         self.start_game("pvp")
                     elif event.key == pygame.K_6:
-                        # Co-op mode - 2 players vs robots (medium)
+                        # Co-op mode - easy
+                        self.game_mode = "coop"
+                        self.start_game("easy")
+                    elif event.key == pygame.K_7:
+                        # Co-op mode - medium
                         self.game_mode = "coop"
                         self.start_game("medium")
-                    elif event.key == pygame.K_7:
+                    elif event.key == pygame.K_8:
                         # Co-op hard mode
                         self.game_mode = "coop"
                         self.start_game("hard")
-                    elif event.key == pygame.K_8:
+                    elif event.key == pygame.K_9:
+                        # Co-op impossible mode
+                        self.game_mode = "coop"
+                        self.start_game("impossible")
+                    elif event.key == pygame.K_0:
                         # Online multiplayer menu
                         self.state = "online_menu"
                         self.online_input_code = ""
@@ -2907,9 +2978,28 @@ class Game:
                         self.state = "playing"
 
                 elif self.state == "online_menu":
-                    if event.key == pygame.K_h:
+                    if event.key == pygame.K_1:
+                        # Select Co-op mode
+                        self.online_game_mode = "coop"
+                        self.online_message = "CO-OP mode selected"
+                    elif event.key == pygame.K_2:
+                        # Select PvP mode
+                        self.online_game_mode = "pvp"
+                        self.online_message = "1v1 PVP mode selected"
+                    elif event.key == pygame.K_LEFT and self.online_game_mode == "coop":
+                        # Previous difficulty
+                        self.online_difficulty_index = (self.online_difficulty_index - 1) % len(self.online_difficulty_options)
+                        self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
+                        self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
+                    elif event.key == pygame.K_RIGHT and self.online_game_mode == "coop":
+                        # Next difficulty
+                        self.online_difficulty_index = (self.online_difficulty_index + 1) % len(self.online_difficulty_options)
+                        self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
+                        self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
+                    elif event.key == pygame.K_h:
                         # Host a game
-                        self.online_message = "Creating room..."
+                        mode_name = "CO-OP" if self.online_game_mode == "coop" else "1v1 PVP"
+                        self.online_message = f"Creating {mode_name} room..."
                         self.is_host = True
                         self.state = "waiting"
                         # Will call JS to host game in update loop
@@ -2928,7 +3018,9 @@ class Game:
                         self.is_host = False
                         self.state = "waiting"
                     elif event.unicode.isdigit() and len(self.online_input_code) < 4:
-                        self.online_input_code += event.unicode
+                        # Only add to room code if not selecting mode (1 or 2)
+                        if event.key not in [pygame.K_1, pygame.K_2]:
+                            self.online_input_code += event.unicode
 
                 elif self.state == "waiting":
                     if event.key == pygame.K_ESCAPE:
@@ -3059,9 +3151,13 @@ class Game:
 
             if status == "connected":
                 self.online_message = "Connected! Starting game..."
-                # Start the game in online co-op mode
-                self.game_mode = "online_coop"
-                self.start_game("medium")
+                # Start the game in selected online mode
+                if self.online_game_mode == "pvp":
+                    self.game_mode = "online_pvp"
+                    self.start_game("medium")  # PvP doesn't need difficulty
+                else:
+                    self.game_mode = "online_coop"
+                    self.start_game(self.online_difficulty)  # Use selected difficulty
                 # Reset online state flags for next time
                 self.online_hosting_started = False
                 self.online_joining_started = False
@@ -3151,7 +3247,7 @@ class Game:
             return
 
         # Handle online multiplayer sync
-        if self.game_mode == "online_coop":
+        if self.game_mode in ["online_coop", "online_pvp"]:
             self.send_game_state()
             self.receive_game_state()
 
@@ -3209,8 +3305,8 @@ class Game:
         self.player.update_reload()  # Update reload animation
 
         # Update Player 2 (in multiplayer modes)
-        # In online_coop, player2 is controlled by network data, not local input
-        if self.player2 and self.player2.health > 0 and self.game_mode != "online_coop":
+        # In online modes, player2 is controlled by network data, not local input
+        if self.player2 and self.player2.health > 0 and self.game_mode not in ["online_coop", "online_pvp"]:
             # In co-op, Player 2 aims at nearest robot; in PvP, aim at Player 1
             target_pos = None
             if self.game_mode == "coop" and self.robots:
@@ -3227,8 +3323,14 @@ class Game:
             self.player2.update_recoil()
             self.player2.update_reload()
 
-        # Update camera (in multiplayer, focus on midpoint between players)
-        if self.player2 and self.player2.health > 0 and self.player.health > 0:
+        # Update camera(s)
+        if self.split_screen:
+            # Split-screen: each camera follows its player
+            self.camera.update(self.player.x, self.player.y)
+            if self.player2:
+                self.camera2.update(self.player2.x, self.player2.y)
+        elif self.player2 and self.player2.health > 0 and self.player.health > 0:
+            # Online modes: focus on midpoint between players
             mid_x = (self.player.x + self.player2.x) // 2
             mid_y = (self.player.y + self.player2.y) // 2
             self.camera.update(mid_x, mid_y)
@@ -3274,7 +3376,7 @@ class Game:
                 bullet_owner = getattr(bullet, 'owner', 'player1')
 
                 # In PvP mode, check if bullet hits the OTHER player
-                if self.game_mode == "pvp":
+                if self.game_mode in ["pvp", "online_pvp"]:
                     if bullet_owner == "player2" and self.player.health > 0:
                         # Player 2's bullet can hit Player 1
                         dist = math.sqrt((bullet.x - self.player.x)**2 + (bullet.y - self.player.y)**2)
@@ -3297,13 +3399,29 @@ class Game:
                 # Check robots (co-op and solo modes)
                 if not hit_something:
                     for robot in self.robots[:]:
+                        # Check for sniper headshot first
+                        is_headshot = False
+                        if bullet.weapon_type == "Sniper" and robot.check_headshot(bullet.x, bullet.y):
+                            is_headshot = True
+
+                        # Check body hit
                         dist = math.sqrt((bullet.x - robot.x)**2 + (bullet.y - robot.y)**2)
-                        if dist < robot.radius + bullet.radius:
-                            if robot.take_damage(bullet.get_damage()):
+                        body_hit = dist < robot.radius + bullet.radius
+
+                        if is_headshot or body_hit:
+                            # Sniper: 150 damage for headshot, 50 for body
+                            if bullet.weapon_type == "Sniper":
+                                damage = 150 if is_headshot else 50
+                            else:
+                                damage = bullet.get_damage()
+
+                            if robot.take_damage(damage):
                                 self.robots.remove(robot)
                                 self.kills += 1
                                 if self.game_mode != "pvp":
-                                    self.score += DIFFICULTY[self.difficulty]["points"]
+                                    # Bonus score for headshot
+                                    bonus = 2 if is_headshot else 1
+                                    self.score += DIFFICULTY[self.difficulty]["points"] * bonus
                                     self.player.add_coin(DIFFICULTY[self.difficulty]["coins"])  # Add coins for kill
                                     # Check if player has 10 coins for shotgun or 50 for RPG
                                     if self.player.coins >= 10 and not self.player.has_shotgun and not self.shop_prompted:
@@ -3315,9 +3433,22 @@ class Game:
 
                 # Check boss
                 if not hit_something and self.boss:
+                    # Check for sniper headshot first
+                    is_headshot = False
+                    if bullet.weapon_type == "Sniper" and self.boss.check_headshot(bullet.x, bullet.y):
+                        is_headshot = True
+
                     dist = math.sqrt((bullet.x - self.boss.x)**2 + (bullet.y - self.boss.y)**2)
-                    if dist < self.boss.radius + bullet.radius:
-                        if self.boss.take_damage(bullet.get_damage()):
+                    body_hit = dist < self.boss.radius + bullet.radius
+
+                    if is_headshot or body_hit:
+                        # Sniper: 150 damage for headshot, 50 for body
+                        if bullet.weapon_type == "Sniper":
+                            damage = 150 if is_headshot else 50
+                        else:
+                            damage = bullet.get_damage()
+
+                        if self.boss.take_damage(damage):
                             # Boss defeated!
                             self.boss = None
                             self.kills += 1
@@ -3434,7 +3565,7 @@ class Game:
 
         # Check win conditions
         # Skip robot-based win condition in PvP (no robots in PvP)
-        if self.game_mode == "pvp":
+        if self.game_mode in ["pvp", "online_pvp"]:
             pass  # PvP win is determined by player death, not robot count
         elif self.difficulty == "impossible":
             # Wave-based win condition
@@ -3470,6 +3601,101 @@ class Game:
             _, sy = self.camera.apply(0, y)
             if 0 <= sy <= SCREEN_HEIGHT:
                 pygame.draw.line(self.screen, (60, 65, 70), (0, sy), (SCREEN_WIDTH, sy))
+
+    def draw_world_to_surface(self, surface, camera):
+        """Draw the game world to a surface using the specified camera"""
+        width = surface.get_width()
+        height = surface.get_height()
+
+        # Fill with floor color
+        surface.fill(FLOOR_COLOR)
+
+        # Draw grid
+        grid_size = 100
+        for x in range(0, MAP_WIDTH, grid_size):
+            sx, _ = camera.apply(x, 0)
+            if 0 <= sx <= width:
+                pygame.draw.line(surface, (60, 65, 70), (sx, 0), (sx, height))
+
+        for y in range(0, MAP_HEIGHT, grid_size):
+            _, sy = camera.apply(0, y)
+            if 0 <= sy <= height:
+                pygame.draw.line(surface, (60, 65, 70), (0, sy), (width, sy))
+
+        # Draw obstacles
+        for obs in self.obstacles:
+            obs.draw(surface, camera)
+
+        # Draw bullets
+        for bullet in self.bullets:
+            bullet.draw(surface, camera)
+
+        # Draw grenades
+        for grenade in self.grenades:
+            grenade.draw(surface, camera)
+
+        # Draw explosions
+        for explosion in self.explosions:
+            explosion.draw(surface, camera)
+
+        # Draw robots - set sniper target visibility based on player's current weapon
+        player1_has_sniper = self.player.weapon["name"] == "Sniper"
+        player2_has_sniper = self.player2 and self.player2.weapon["name"] == "Sniper"
+        has_sniper = player1_has_sniper or player2_has_sniper
+        for robot in self.robots:
+            robot.show_sniper_target = has_sniper
+            robot.draw(surface, camera)
+
+        # Draw boss
+        if self.boss:
+            self.boss.show_sniper_target = has_sniper
+            self.boss.draw(surface, camera)
+
+        # Draw shell casings
+        for casing in self.shell_casings:
+            casing.draw(surface, camera)
+
+        # Draw players
+        self.player.draw(surface, camera)
+        if self.player2 and self.player2.health > 0:
+            self.player2.draw(surface, camera)
+
+        # Draw muzzle flashes
+        for flash in self.muzzle_flashes:
+            flash.draw(surface, camera)
+
+        # Draw healing effects
+        for effect in self.healing_effects:
+            effect.draw(surface, camera)
+
+    def draw_split_screen_hud(self, surface, player, is_player1, width):
+        """Draw HUD for one player in split-screen mode"""
+        bar_width = min(150, width - 20)
+        bar_height = 20
+        bar_x = 10
+        bar_y = 10
+
+        # Player label
+        if is_player1:
+            label = self.small_font.render("P1", True, LIGHT_BLUE)
+        else:
+            label = self.small_font.render("P2", True, (30, 60, 150))
+        surface.blit(label, (bar_x, bar_y - 5))
+
+        # Health bar
+        pygame.draw.rect(surface, DARK_GRAY, (bar_x + 30, bar_y, bar_width, bar_height))
+        health_width = int((max(0, player.health) / player.max_health) * bar_width)
+        health_color = GREEN if player.health > 50 else YELLOW if player.health > 25 else RED
+        pygame.draw.rect(surface, health_color, (bar_x + 30, bar_y, health_width, bar_height))
+        pygame.draw.rect(surface, WHITE, (bar_x + 30, bar_y, bar_width, bar_height), 2)
+
+        hp_text = self.small_font.render(f"{int(max(0, player.health))}", True, WHITE)
+        surface.blit(hp_text, (bar_x + 35, bar_y + 2))
+
+        # Weapon info
+        weapon_name = player.weapon["name"]
+        weapon_text = self.small_font.render(f"{weapon_name}: {player.ammo}", True, player.weapon["color"])
+        surface.blit(weapon_text, (bar_x, bar_y + 28))
 
     def draw_minimap(self):
         # Minimap in corner
@@ -3759,7 +3985,7 @@ class Game:
         self.screen.fill(DARK_GRAY)
 
         # Version number in top right
-        version = self.font.render("v2.7", True, WHITE)
+        version = self.font.render("v3.0", True, WHITE)
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
         title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
@@ -3785,37 +4011,41 @@ class Game:
 
         # Multiplayer section
         multi_header = self.font.render("-- 2 PLAYER (SAME DEVICE) --", True, ORANGE)
-        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 370))
+        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 365))
 
         pvp = self.small_font.render("[5] PvP - 1v1 Battle", True, (255, 100, 100))
-        coop = self.small_font.render("[6] CO-OP Medium", True, (100, 255, 100))
-        coop_hard = self.small_font.render("[7] CO-OP Hard", True, (255, 200, 100))
+        coop_easy = self.small_font.render("[6] CO-OP Easy", True, GREEN)
+        coop_med = self.small_font.render("[7] CO-OP Medium", True, YELLOW)
+        coop_hard = self.small_font.render("[8] CO-OP Hard", True, ORANGE)
+        coop_imp = self.small_font.render("[9] CO-OP Impossible", True, RED)
 
-        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 400))
-        self.screen.blit(coop, (SCREEN_WIDTH // 2 - coop.get_width() // 2, 425))
-        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 450))
+        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 390))
+        self.screen.blit(coop_easy, (SCREEN_WIDTH // 2 - coop_easy.get_width() // 2, 412))
+        self.screen.blit(coop_med, (SCREEN_WIDTH // 2 - coop_med.get_width() // 2, 434))
+        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 456))
+        self.screen.blit(coop_imp, (SCREEN_WIDTH // 2 - coop_imp.get_width() // 2, 478))
 
         # Online Multiplayer section
         online_header = self.font.render("-- ONLINE MULTIPLAYER --", True, (0, 200, 255))
-        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 485))
+        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 510))
 
-        online_coop = self.small_font.render("[8] ONLINE CO-OP - Play with friend on another device!", True, (0, 255, 200))
-        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 515))
+        online_coop = self.small_font.render("[0] ONLINE - Play with friend on another device!", True, (0, 255, 200))
+        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 540))
 
         # Map selection section
         map_header = self.small_font.render("-- MAP: [<] [>] --", True, GRAY)
-        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 555))
+        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 575))
 
         # Display current map with arrows
         map_display = self.font.render(f"< {self.selected_map.upper()} >", True, (100, 200, 255))
-        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 575))
+        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 595))
 
         # Show logged in user or guest status
         if current_user:
             user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
         else:
             user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 620))
+        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 640))
 
         # Controls hint
         controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
@@ -3829,9 +4059,12 @@ class Game:
         self.screen.blit(overlay, (0, 0))
 
         # Result - different for PvP mode
-        if self.game_mode == "pvp" and self.pvp_winner:
+        if self.game_mode in ["pvp", "online_pvp"] and self.pvp_winner:
             result = self.big_font.render(f"{self.pvp_winner} WINS!", True, GREEN)
-            subtitle = self.font.render("PvP Battle Complete", True, YELLOW)
+            if self.game_mode == "online_pvp":
+                subtitle = self.font.render("Online PvP Battle Complete", True, YELLOW)
+            else:
+                subtitle = self.font.render("PvP Battle Complete", True, YELLOW)
             self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 280))
             self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 360))
         elif self.game_mode == "coop" or self.game_mode == "online_coop":
@@ -3871,35 +4104,82 @@ class Game:
 
         # Title
         title = self.big_font.render("ONLINE MULTIPLAYER", True, (0, 200, 255))
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 60))
 
         # Box
-        box_width = 500
-        box_height = 350
+        box_width = 550
+        box_height = 420
         box_x = SCREEN_WIDTH // 2 - box_width // 2
-        box_y = 150
+        box_y = 120
 
         pygame.draw.rect(self.screen, (40, 40, 60), (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, (0, 200, 255), (box_x, box_y, box_width, box_height), 3)
 
+        # Game mode selection
+        mode_label = self.font.render("Game Mode:", True, WHITE)
+        self.screen.blit(mode_label, (box_x + 30, box_y + 20))
+
+        # Co-op option
+        coop_color = GREEN if self.online_game_mode == "coop" else GRAY
+        coop_text = self.font.render("[1] CO-OP", True, coop_color)
+        coop_desc = self.small_font.render("Team up vs robots", True, coop_color)
+        self.screen.blit(coop_text, (box_x + 50, box_y + 55))
+        self.screen.blit(coop_desc, (box_x + 160, box_y + 58))
+
+        # PvP option
+        pvp_color = RED if self.online_game_mode == "pvp" else GRAY
+        pvp_text = self.font.render("[2] 1v1 PVP", True, pvp_color)
+        pvp_desc = self.small_font.render("Fight each other", True, pvp_color)
+        self.screen.blit(pvp_text, (box_x + 300, box_y + 55))
+        self.screen.blit(pvp_desc, (box_x + 420, box_y + 58))
+
+        # Separator
+        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 95), (box_x + box_width - 20, box_y + 95), 1)
+
+        # Difficulty selection (only for co-op mode)
+        if self.online_game_mode == "coop":
+            diff_label = self.font.render("Difficulty:", True, WHITE)
+            self.screen.blit(diff_label, (box_x + 30, box_y + 105))
+
+            # Arrow buttons and difficulty display
+            left_arrow = self.font.render("<", True, YELLOW)
+            right_arrow = self.font.render(">", True, YELLOW)
+            diff_name = self.online_difficulty.upper()
+            diff_colors = {"easy": GREEN, "medium": YELLOW, "hard": ORANGE, "impossible": RED}
+            diff_color = diff_colors.get(self.online_difficulty, WHITE)
+            diff_text = self.font.render(diff_name, True, diff_color)
+
+            self.screen.blit(left_arrow, (box_x + 180, box_y + 105))
+            self.screen.blit(diff_text, (box_x + 220, box_y + 105))
+            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 105))
+
+            arrow_hint = self.small_font.render("[LEFT/RIGHT] to change", True, GRAY)
+            self.screen.blit(arrow_hint, (box_x + 330, box_y + 108))
+
+            # Second separator
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 140), (box_x + box_width - 20, box_y + 140), 1)
+            host_y_offset = 45
+        else:
+            host_y_offset = 0
+
         # Options
         host_text = self.font.render("[H] HOST GAME", True, GREEN)
         host_desc = self.small_font.render("Create a room and share code with friend", True, GRAY)
-        self.screen.blit(host_text, (box_x + 30, box_y + 40))
-        self.screen.blit(host_desc, (box_x + 30, box_y + 75))
+        self.screen.blit(host_text, (box_x + 30, box_y + 110 + host_y_offset))
+        self.screen.blit(host_desc, (box_x + 30, box_y + 145 + host_y_offset))
 
         join_text = self.font.render("[J] JOIN GAME", True, YELLOW)
         join_desc = self.small_font.render("Enter 4-digit room code to join friend", True, GRAY)
-        self.screen.blit(join_text, (box_x + 30, box_y + 130))
-        self.screen.blit(join_desc, (box_x + 30, box_y + 165))
+        self.screen.blit(join_text, (box_x + 30, box_y + 190 + host_y_offset))
+        self.screen.blit(join_desc, (box_x + 30, box_y + 225 + host_y_offset))
 
         # Room code input (if joining)
         if self.online_input_active or len(self.online_input_code) > 0:
             code_label = self.font.render("Room Code:", True, WHITE)
-            self.screen.blit(code_label, (box_x + 30, box_y + 220))
+            self.screen.blit(code_label, (box_x + 30, box_y + 270 + host_y_offset))
 
             # Code input box
-            code_box = pygame.Rect(box_x + 180, box_y + 215, 150, 40)
+            code_box = pygame.Rect(box_x + 180, box_y + 265 + host_y_offset, 150, 40)
             pygame.draw.rect(self.screen, (60, 60, 80), code_box)
             pygame.draw.rect(self.screen, YELLOW, code_box, 2)
 
@@ -3908,19 +4188,19 @@ class Game:
 
             if len(self.online_input_code) == 4:
                 enter_hint = self.small_font.render("Press ENTER to join", True, GREEN)
-                self.screen.blit(enter_hint, (box_x + 180, box_y + 260))
+                self.screen.blit(enter_hint, (box_x + 180, box_y + 310 + host_y_offset))
 
         # Message
         if self.online_message:
             msg = self.font.render(self.online_message, True, ORANGE)
-            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, box_y + 290))
+            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, box_y + 350 + host_y_offset))
 
         # Back option
         back_text = self.small_font.render("[ESC] Back to Menu", True, RED)
-        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 320))
+        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 385 + host_y_offset))
 
         # Version
-        version = self.small_font.render("v2.7", True, WHITE)
+        version = self.small_font.render("v3.0", True, WHITE)
         self.screen.blit(version, (10, 10))
 
     def draw_waiting_screen(self):
@@ -4055,56 +4335,93 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop":
-            self.draw_background()
+            if self.split_screen and self.player2:
+                # Split-screen rendering for local multiplayer
+                half_width = SCREEN_WIDTH // 2
 
-            # Draw obstacles
-            for obs in self.obstacles:
-                obs.draw(self.screen, self.camera)
+                # Create surfaces for each player's view
+                surface1 = pygame.Surface((half_width, SCREEN_HEIGHT))
+                surface2 = pygame.Surface((half_width, SCREEN_HEIGHT))
 
-            # Draw bullets
-            for bullet in self.bullets:
-                bullet.draw(self.screen, self.camera)
+                # Draw world from player 1's perspective
+                self.draw_world_to_surface(surface1, self.camera)
+                self.draw_split_screen_hud(surface1, self.player, True, half_width)
 
-            # Draw grenades
-            for grenade in self.grenades:
-                grenade.draw(self.screen, self.camera)
+                # Draw world from player 2's perspective
+                self.draw_world_to_surface(surface2, self.camera2)
+                self.draw_split_screen_hud(surface2, self.player2, False, half_width)
 
-            # Draw explosions
-            for explosion in self.explosions:
-                explosion.draw(self.screen, self.camera)
+                # Blit both surfaces to screen
+                self.screen.blit(surface1, (0, 0))
+                self.screen.blit(surface2, (half_width, 0))
 
-            # Draw robots
-            for robot in self.robots:
-                robot.draw(self.screen, self.camera)
+                # Draw divider line
+                pygame.draw.line(self.screen, WHITE, (half_width, 0), (half_width, SCREEN_HEIGHT), 4)
 
-            # Draw boss
-            if self.boss:
-                self.boss.draw(self.screen, self.camera)
+                # Draw score/kills in center bottom
+                score_text = self.small_font.render(f"Score: {self.score} | Kills: {self.kills}", True, YELLOW)
+                self.screen.blit(score_text, (SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT - 30))
 
-            # Draw shell casings (on ground, behind player)
-            for casing in self.shell_casings:
-                casing.draw(self.screen, self.camera)
+                # Draw robots remaining
+                robots_text = self.small_font.render(f"Robots: {len(self.robots)}", True, ORANGE)
+                self.screen.blit(robots_text, (SCREEN_WIDTH // 2 - robots_text.get_width() // 2, SCREEN_HEIGHT - 55))
+            else:
+                # Standard single-screen rendering
+                self.draw_background()
 
-            # Draw player
-            self.player.draw(self.screen, self.camera)
+                # Draw obstacles
+                for obs in self.obstacles:
+                    obs.draw(self.screen, self.camera)
 
-            # Draw Player 2 (in multiplayer modes)
-            if self.player2 and self.player2.health > 0:
-                self.player2.draw(self.screen, self.camera)
+                # Draw bullets
+                for bullet in self.bullets:
+                    bullet.draw(self.screen, self.camera)
 
-            # Draw muzzle flashes (in front of player)
-            for flash in self.muzzle_flashes:
-                flash.draw(self.screen, self.camera)
+                # Draw grenades
+                for grenade in self.grenades:
+                    grenade.draw(self.screen, self.camera)
 
-            # Draw healing effects
-            for effect in self.healing_effects:
-                effect.draw(self.screen, self.camera)
+                # Draw explosions
+                for explosion in self.explosions:
+                    explosion.draw(self.screen, self.camera)
 
-            # Draw HUD
-            self.draw_hud()
+                # Draw robots - set sniper target visibility based on player's current weapon
+                player1_has_sniper = self.player.weapon["name"] == "Sniper"
+                player2_has_sniper = self.player2 and self.player2.weapon["name"] == "Sniper"
+                has_sniper = player1_has_sniper or player2_has_sniper
+                for robot in self.robots:
+                    robot.show_sniper_target = has_sniper
+                    robot.draw(self.screen, self.camera)
 
-            # Draw minimap
-            self.draw_minimap()
+                # Draw boss
+                if self.boss:
+                    self.boss.show_sniper_target = has_sniper
+                    self.boss.draw(self.screen, self.camera)
+
+                # Draw shell casings (on ground, behind player)
+                for casing in self.shell_casings:
+                    casing.draw(self.screen, self.camera)
+
+                # Draw player
+                self.player.draw(self.screen, self.camera)
+
+                # Draw Player 2 (in multiplayer modes)
+                if self.player2 and self.player2.health > 0:
+                    self.player2.draw(self.screen, self.camera)
+
+                # Draw muzzle flashes (in front of player)
+                for flash in self.muzzle_flashes:
+                    flash.draw(self.screen, self.camera)
+
+                # Draw healing effects
+                for effect in self.healing_effects:
+                    effect.draw(self.screen, self.camera)
+
+                # Draw HUD
+                self.draw_hud()
+
+                # Draw minimap
+                self.draw_minimap()
 
             # Draw mobile controls
             if self.mobile_controls and self.state == "playing":
