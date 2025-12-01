@@ -3521,14 +3521,31 @@ class Game:
                             elif self.player.coins >= 50 and not self.player.has_rpg and self.player.has_shotgun and not self.shop_prompted:
                                 self.state = "shop"
 
-                # Damage player if in explosion radius
+                # Damage player 1 if in explosion radius
                 dist = math.sqrt((grenade.x - self.player.x)**2 + (grenade.y - self.player.y)**2)
                 if dist < grenade.explosion_radius:
                     damage_mult = 1 - (dist / grenade.explosion_radius) * 0.5
                     damage = int(grenade.damage * damage_mult * 0.5)  # Player takes less self-damage
                     if self.player.take_damage(damage):
-                        self.state = "gameover"
-                        self.stop_music()
+                        # In co-op, only game over if both players dead
+                        if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                            pass  # Player 2 still alive, continue
+                        else:
+                            self.state = "gameover"
+                            self.stop_music()
+
+                # Damage player 2 if in explosion radius (co-op)
+                if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                    dist2 = math.sqrt((grenade.x - self.player2.x)**2 + (grenade.y - self.player2.y)**2)
+                    if dist2 < grenade.explosion_radius:
+                        damage_mult = 1 - (dist2 / grenade.explosion_radius) * 0.5
+                        damage = int(grenade.damage * damage_mult * 0.5)
+                        if self.player2.take_damage(damage):
+                            if self.player.health > 0:
+                                pass  # Player 1 still alive, continue
+                            else:
+                                self.state = "gameover"
+                                self.stop_music()
 
                 grenade.exploded = True
                 self.grenades.remove(grenade)
@@ -3544,11 +3561,26 @@ class Game:
             robot.update(self.player.x, self.player.y, self.obstacles)
 
             # Robot uses knife when close, otherwise shoots
+            # Check player 1
             if robot.can_knife(self.player.x, self.player.y):
                 damage = robot.knife_attack()
                 if self.player.take_damage(damage):
-                    self.state = "gameover"
-                    self.stop_music()
+                    # In co-op, only game over if both players dead
+                    if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                        pass  # Player 2 still alive, continue
+                    else:
+                        self.state = "gameover"
+                        self.stop_music()
+            # Check player 2 in co-op
+            elif (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                if robot.can_knife(self.player2.x, self.player2.y):
+                    damage = robot.knife_attack()
+                    if self.player2.take_damage(damage):
+                        if self.player.health > 0:
+                            pass  # Player 1 still alive, continue
+                        else:
+                            self.state = "gameover"
+                            self.stop_music()
             elif robot.can_shoot():
                 bullet = robot.shoot(self.player.x, self.player.y)
                 bullet.damage = DIFFICULTY[self.difficulty]["damage"]
@@ -3563,12 +3595,27 @@ class Game:
                 bullets = self.boss.shoot(self.player.x, self.player.y)
                 self.bullets.extend(bullets)
 
-            # Check boss collision with player (charge attack damage)
+            # Check boss collision with player 1 (charge attack damage)
             dist_to_boss = math.sqrt((self.boss.x - self.player.x)**2 + (self.boss.y - self.player.y)**2)
             if dist_to_boss < self.boss.radius + self.player.radius:
                 if self.player.take_damage(20):
-                    self.state = "gameover"
-                    self.stop_music()
+                    # In co-op, only game over if both players dead
+                    if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                        pass  # Player 2 still alive, continue
+                    else:
+                        self.state = "gameover"
+                        self.stop_music()
+
+            # Check boss collision with player 2 in co-op
+            if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                dist_to_boss2 = math.sqrt((self.boss.x - self.player2.x)**2 + (self.boss.y - self.player2.y)**2)
+                if dist_to_boss2 < self.boss.radius + self.player2.radius:
+                    if self.player2.take_damage(20):
+                        if self.player.health > 0:
+                            pass  # Player 1 still alive, continue
+                        else:
+                            self.state = "gameover"
+                            self.stop_music()
 
         # Check win conditions
         # Skip robot-based win condition in PvP (no robots in PvP)
