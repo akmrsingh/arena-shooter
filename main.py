@@ -2633,7 +2633,9 @@ class Game:
         if difficulty == "impossible":
             self.player.health = 10000
             self.player.max_health = 10000
-        self.spawn_robots()
+        # Only spawn robots in non-PvP modes (PvP is player vs player only)
+        if self.game_mode not in ["pvp", "online_pvp"]:
+            self.spawn_robots()
         self.state = "playing"
         self.play_boss_music()
 
@@ -3558,7 +3560,15 @@ class Game:
 
         # Update robots
         for robot in self.robots:
-            robot.update(self.player.x, self.player.y, self.obstacles)
+            # In co-op, robots target the nearest player
+            target_x, target_y = self.player.x, self.player.y
+            if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                dist_to_p1 = math.sqrt((robot.x - self.player.x)**2 + (robot.y - self.player.y)**2)
+                dist_to_p2 = math.sqrt((robot.x - self.player2.x)**2 + (robot.y - self.player2.y)**2)
+                if self.player.health <= 0 or (self.player2.health > 0 and dist_to_p2 < dist_to_p1):
+                    target_x, target_y = self.player2.x, self.player2.y
+
+            robot.update(target_x, target_y, self.obstacles)
 
             # Robot uses knife when close, otherwise shoots
             # Check player 1
@@ -3582,17 +3592,26 @@ class Game:
                             self.state = "gameover"
                             self.stop_music()
             elif robot.can_shoot():
-                bullet = robot.shoot(self.player.x, self.player.y)
+                # Shoot at nearest player
+                bullet = robot.shoot(target_x, target_y)
                 bullet.damage = DIFFICULTY[self.difficulty]["damage"]
                 self.bullets.append(bullet)
 
         # Update boss (impossible mode)
         if self.boss:
-            self.boss.update(self.player.x, self.player.y, self.obstacles)
+            # In co-op, boss targets nearest player
+            boss_target_x, boss_target_y = self.player.x, self.player.y
+            if (self.game_mode == "coop" or self.game_mode == "online_coop") and self.player2 and self.player2.health > 0:
+                dist_to_p1 = math.sqrt((self.boss.x - self.player.x)**2 + (self.boss.y - self.player.y)**2)
+                dist_to_p2 = math.sqrt((self.boss.x - self.player2.x)**2 + (self.boss.y - self.player2.y)**2)
+                if self.player.health <= 0 or (self.player2.health > 0 and dist_to_p2 < dist_to_p1):
+                    boss_target_x, boss_target_y = self.player2.x, self.player2.y
 
-            # Boss shoots multiple bullets
+            self.boss.update(boss_target_x, boss_target_y, self.obstacles)
+
+            # Boss shoots multiple bullets at nearest player
             if self.boss.can_shoot():
-                bullets = self.boss.shoot(self.player.x, self.player.y)
+                bullets = self.boss.shoot(boss_target_x, boss_target_y)
                 self.bullets.extend(bullets)
 
             # Check boss collision with player 1 (charge attack damage)
