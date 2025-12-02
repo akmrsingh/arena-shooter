@@ -2427,6 +2427,52 @@ class Game:
 
         self.create_obstacles()
 
+        # After obstacles are created, make sure players aren't stuck in walls
+        self.ensure_safe_spawn()
+
+    def ensure_safe_spawn(self):
+        """Move players out of obstacles if they spawned inside one"""
+        player_radius = 20
+
+        # Check and fix player 1
+        for obs in self.obstacles:
+            if obs.collides_circle(self.player.x, self.player.y, player_radius):
+                # Find a safe spot nearby
+                self.player.x, self.player.y = self.find_safe_position(self.player.x, self.player.y, player_radius)
+                break
+
+        # Check and fix player 2
+        if self.player2:
+            for obs in self.obstacles:
+                if obs.collides_circle(self.player2.x, self.player2.y, player_radius):
+                    self.player2.x, self.player2.y = self.find_safe_position(self.player2.x, self.player2.y, player_radius)
+                    break
+
+    def find_safe_position(self, start_x, start_y, radius):
+        """Find a position near start_x, start_y that doesn't collide with obstacles"""
+        # Try positions in expanding circles
+        for dist in range(50, 500, 50):
+            for angle in range(0, 360, 45):
+                test_x = start_x + dist * math.cos(math.radians(angle))
+                test_y = start_y + dist * math.sin(math.radians(angle))
+
+                # Keep in bounds
+                test_x = max(100, min(MAP_WIDTH - 100, test_x))
+                test_y = max(100, min(MAP_HEIGHT - 100, test_y))
+
+                # Check if this position is safe
+                safe = True
+                for obs in self.obstacles:
+                    if obs.collides_circle(test_x, test_y, radius):
+                        safe = False
+                        break
+
+                if safe:
+                    return test_x, test_y
+
+        # Fallback - return original position
+        return start_x, start_y
+
     def create_obstacles(self):
         self.obstacles = []
 
