@@ -625,6 +625,10 @@ class Bullet:
                 self._draw_dual_pistols(screen, sx, sy)
             elif self.weapon_type == "Throwing Knives":
                 self._draw_throwing_knife(screen, sx, sy)
+            elif self.weapon_type == "Enemy_Knife":
+                self._draw_enemy_knife(screen, sx, sy)
+            elif self.weapon_type == "Enemy_Pistol":
+                self._draw_enemy_pistol(screen, sx, sy)
             else:
                 # Enemy bullets or default
                 self._draw_enemy_bullet(screen, sx, sy)
@@ -736,6 +740,32 @@ class Bullet:
         pygame.draw.circle(screen, (255, 200, 100), (int(sx), int(sy)), self.radius)
         # Hot center
         pygame.draw.circle(screen, (255, 255, 200), (int(sx), int(sy)), self.radius - 2)
+
+    def _draw_enemy_knife(self, screen, sx, sy):
+        """Draw enemy throwing knife - spinning silver blade"""
+        knife_length = 14
+        # Spinning effect using lifetime
+        spin_angle = self.angle + (self.lifetime * 0.4)
+        tip_x = sx + math.cos(spin_angle) * knife_length
+        tip_y = sy + math.sin(spin_angle) * knife_length
+        base_x = sx - math.cos(spin_angle) * (knife_length / 2)
+        base_y = sy - math.sin(spin_angle) * (knife_length / 2)
+        # Blade
+        pygame.draw.line(screen, (192, 192, 192), (base_x, base_y), (tip_x, tip_y), 3)
+        # Shine on blade
+        pygame.draw.line(screen, (255, 255, 255), (sx, sy), (tip_x, tip_y), 1)
+        # Small red glow for danger
+        pygame.draw.circle(screen, (200, 50, 50), (int(sx), int(sy)), 3)
+
+    def _draw_enemy_pistol(self, screen, sx, sy):
+        """Draw enemy dual pistol bullet - small golden bullet"""
+        bullet_length = 7
+        tip_x = sx + math.cos(self.angle) * bullet_length
+        tip_y = sy + math.sin(self.angle) * bullet_length
+        # Gold casing
+        pygame.draw.line(screen, (255, 180, 50), (sx, sy), (tip_x, tip_y), 3)
+        # Shine
+        pygame.draw.line(screen, (255, 240, 150), (sx, sy), (tip_x, tip_y), 1)
 
     def _draw_flamethrower(self, screen, sx, sy):
         """Draw flamethrower fire particle"""
@@ -1061,19 +1091,44 @@ class HealingEffect:
 
 
 class Robot:
-    def __init__(self, x, y, difficulty, knife_only=False):
+    def __init__(self, x, y, difficulty, knife_only=False, bot_type="gun"):
         self.x = x
         self.y = y
         self.settings = DIFFICULTY[difficulty]
         self.health = self.settings["health"]
         self.max_health = self.settings["health"]
         self.speed = self.settings["speed"]
+        self.bot_type = bot_type  # "gun", "knife", "throwing_knife", "dual_pistol"
+
+        # Override knife_only if bot_type is knife
+        if bot_type == "knife":
+            knife_only = True
+
         # Knife-only bots are slightly faster to chase player
         if knife_only:
             self.speed = self.speed * 1.2
-        self.color = self.settings["color"]
+
+        # Throwing knife bots are medium speed with ranged attacks
+        if bot_type == "throwing_knife":
+            self.speed = self.speed * 0.9
+            self.color = (192, 192, 192)  # Silver color
+        # Dual pistol bots are faster and more aggressive
+        elif bot_type == "dual_pistol":
+            self.speed = self.speed * 1.1
+            self.color = (255, 215, 0)  # Gold color
+        else:
+            self.color = self.settings["color"]
+
         self.fire_cooldown = 0
         self.fire_rate = self.settings["fire_rate"]
+
+        # Dual pistol bots fire faster
+        if bot_type == "dual_pistol":
+            self.fire_rate = max(15, self.fire_rate // 2)
+        # Throwing knife bots fire slower but deal more damage
+        elif bot_type == "throwing_knife":
+            self.fire_rate = self.fire_rate + 20
+
         self.radius = 20
         self.angle = 0
         self.difficulty = difficulty
@@ -1214,7 +1269,23 @@ class Robot:
         accuracy = 0.3 if self.difficulty == "easy" else 0.15 if self.difficulty == "medium" else 0.08
         angle = self.angle + random.uniform(-accuracy, accuracy)
 
-        return Bullet(self.x, self.y, angle, False, False, "Enemy")
+        # Different weapon types for different bot types
+        if self.bot_type == "throwing_knife":
+            bullet = Bullet(self.x, self.y, angle, False, False, "Enemy_Knife")
+            bullet.damage = 25  # Higher damage for throwing knives
+            bullet.speed = 12
+            return bullet
+        elif self.bot_type == "dual_pistol":
+            # Dual pistols shoot two bullets with slight angle offset
+            bullets = []
+            for offset in [-0.1, 0.1]:
+                bullet = Bullet(self.x, self.y, angle + offset, False, False, "Enemy_Pistol")
+                bullet.damage = 8  # Lower damage per bullet
+                bullet.speed = 14
+                bullets.append(bullet)
+            return bullets
+        else:
+            return Bullet(self.x, self.y, angle, False, False, "Enemy")
 
     def take_damage(self, damage):
         self.health -= damage
@@ -1273,7 +1344,7 @@ class Robot:
             pygame.draw.circle(screen, RED, (int(right_eye_x), int(right_eye_y)), 4)
             pygame.draw.circle(screen, (150, 0, 0), (int(right_eye_x), int(right_eye_y)), 2)
 
-            # Draw weapon (knife or gun)
+            # Draw weapon based on bot type
             if self.knife_only:
                 # Draw knife - shorter and silver colored
                 knife_length = self.radius + 8
@@ -1284,8 +1355,33 @@ class Robot:
                 tip_x = sx + math.cos(self.angle) * (knife_length + 4)
                 tip_y = sy + math.sin(self.angle) * (knife_length + 4)
                 pygame.draw.line(screen, WHITE, (knife_x, knife_y), (tip_x, tip_y), 2)
+            elif self.bot_type == "throwing_knife":
+                # Draw multiple throwing knives on back (like a bandolier)
+                for i in range(-1, 2):
+                    offset_angle = self.angle + math.pi + (i * 0.3)
+                    kx = sx + math.cos(offset_angle) * (self.radius - 5)
+                    ky = sy + math.sin(offset_angle) * (self.radius - 5)
+                    ktx = kx + math.cos(offset_angle) * 8
+                    kty = ky + math.sin(offset_angle) * 8
+                    pygame.draw.line(screen, (192, 192, 192), (kx, ky), (ktx, kty), 2)
+                # Draw arm with knife ready to throw
+                arm_x = sx + math.cos(self.angle) * (self.radius + 5)
+                arm_y = sy + math.sin(self.angle) * (self.radius + 5)
+                pygame.draw.line(screen, (150, 150, 150), (sx, sy), (arm_x, arm_y), 4)
+            elif self.bot_type == "dual_pistol":
+                # Draw two guns (dual pistols)
+                for offset in [0.4, -0.4]:
+                    gun_angle = self.angle + offset
+                    gun_start_x = sx + math.cos(gun_angle) * 5
+                    gun_start_y = sy + math.sin(gun_angle) * 5
+                    gun_length = self.radius + 8
+                    gun_x = sx + math.cos(gun_angle) * gun_length
+                    gun_y = sy + math.sin(gun_angle) * gun_length
+                    pygame.draw.line(screen, (255, 215, 0), (gun_start_x, gun_start_y), (gun_x, gun_y), 4)
+                    # Gold tip
+                    pygame.draw.circle(screen, (255, 240, 150), (int(gun_x), int(gun_y)), 2)
             else:
-                # Draw gun
+                # Draw standard gun
                 gun_length = self.radius + 10
                 gun_x = sx + math.cos(self.angle) * gun_length
                 gun_y = sy + math.sin(self.angle) * gun_length
@@ -3157,7 +3253,11 @@ class Game:
         self.robots = []
 
         total_count = settings["count"]
-        knife_count = total_count // 2  # Half are knife-only
+        # Distribute bot types: 30% knife, 30% gun, 20% throwing knife, 20% dual pistol
+        knife_count = int(total_count * 0.3)
+        gun_count = int(total_count * 0.3)
+        throwing_knife_count = int(total_count * 0.2)
+        dual_pistol_count = total_count - knife_count - gun_count - throwing_knife_count
         spawned = 0
 
         for i in range(total_count):
@@ -3177,9 +3277,19 @@ class Game:
                             break
 
                     if valid:
-                        # First half are knife-only bots
-                        is_knife_only = (spawned < knife_count)
-                        self.robots.append(Robot(x, y, self.difficulty, knife_only=is_knife_only))
+                        # Determine bot type based on spawn count
+                        if spawned < knife_count:
+                            # Knife-only melee bots
+                            self.robots.append(Robot(x, y, self.difficulty, knife_only=True, bot_type="knife"))
+                        elif spawned < knife_count + gun_count:
+                            # Regular gun bots
+                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="gun"))
+                        elif spawned < knife_count + gun_count + throwing_knife_count:
+                            # Throwing knife bots (ranged)
+                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="throwing_knife"))
+                        else:
+                            # Dual pistol bots (ranged)
+                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="dual_pistol"))
                         spawned += 1
                         break
 
@@ -4232,9 +4342,15 @@ class Game:
                             self.stop_music()
             elif robot.can_shoot():
                 # Shoot at nearest player
-                bullet = robot.shoot(target_x, target_y)
-                bullet.damage = DIFFICULTY[self.difficulty]["damage"]
-                self.bullets.append(bullet)
+                result = robot.shoot(target_x, target_y)
+                # Handle single bullet or list of bullets (dual pistol bots)
+                if isinstance(result, list):
+                    for bullet in result:
+                        bullet.damage = DIFFICULTY[self.difficulty]["damage"]
+                    self.bullets.extend(result)
+                else:
+                    result.damage = DIFFICULTY[self.difficulty]["damage"]
+                    self.bullets.append(result)
 
         # Update boss (impossible mode)
         if self.boss:

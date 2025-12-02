@@ -71,9 +71,16 @@ Choose from 5 different map layouts:
 - **Fortress** - Four corner fortresses with center cross
 - **Open** - Mostly open space with few pillars
 
+### Enemy Robot Types
+- **Gun Bots** (Red) - Standard robots with ranged attacks
+- **Knife Bots** (Dark red) - Fast melee-only robots, 20% faster
+- **Throwing Knife Bots** (Silver) - Ranged attackers with spinning knives, high damage
+- **Dual Pistol Bots** (Gold) - Fast bots that shoot two bullets at once, 10% faster
+
 ### Tips
 - Use cover! Hide behind obstacles to avoid enemy fire
-- Knife-wielding robots are faster but can only melee
+- Knife bots are faster but can only melee - keep your distance!
+- Watch out for gold dual pistol bots - they're fast and shoot twice!
 - Save coins to buy powerful weapons from the shop
 - The minimap (bottom-right) shows enemy positions
 - Reload before engaging large groups
@@ -212,6 +219,7 @@ ani-games/
 ## Features
 
 - 4 difficulty levels + boss fight
+- 4 enemy robot types: Gun, Knife, Throwing Knife, and Dual Pistol bots
 - 16 unique weapons with realistic visuals and special effects
 - Special weapon effects: Freeze Ray slows enemies, Electric Gun chains to nearby targets
 - Shell casings and muzzle flash effects
