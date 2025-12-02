@@ -149,7 +149,11 @@ STORAGE_KEY_USERS = "arena_shooter_users"
 STORAGE_KEY_GUEST = "arena_shooter_guest"
 
 # Fallback in-memory storage
-web_save_data = {"coins": 0, "has_rpg": False, "has_shotgun": False, "medkit_charges": 0, "has_sniper": False}
+web_save_data = {
+    "coins": 0, "has_rpg": False, "has_shotgun": False, "medkit_charges": 0, "has_sniper": False,
+    "has_flamethrower": False, "has_laser": False, "has_minigun": False, "has_crossbow": False,
+    "has_electric": False, "has_freeze": False, "has_dual_pistols": False, "has_throwing_knives": False
+}
 web_users = {}
 current_user = None
 
@@ -253,19 +257,29 @@ def load_save():
             data = web_users[current_user]
             return (data.get("coins", 0), data.get("has_rpg", False),
                     data.get("has_shotgun", False), data.get("medkit_charges", 0),
-                    data.get("has_sniper", False))
+                    data.get("has_sniper", False), data.get("has_flamethrower", False),
+                    data.get("has_laser", False), data.get("has_minigun", False),
+                    data.get("has_crossbow", False), data.get("has_electric", False),
+                    data.get("has_freeze", False), data.get("has_dual_pistols", False),
+                    data.get("has_throwing_knives", False))
 
     # Guest mode - try to load guest data from storage
     guest_data = storage_get(STORAGE_KEY_GUEST)
     if guest_data:
         web_save_data = guest_data
 
-    return (web_save_data["coins"], web_save_data["has_rpg"],
-            web_save_data["has_shotgun"], web_save_data["medkit_charges"],
-            web_save_data["has_sniper"])
+    return (web_save_data.get("coins", 0), web_save_data.get("has_rpg", False),
+            web_save_data.get("has_shotgun", False), web_save_data.get("medkit_charges", 0),
+            web_save_data.get("has_sniper", False), web_save_data.get("has_flamethrower", False),
+            web_save_data.get("has_laser", False), web_save_data.get("has_minigun", False),
+            web_save_data.get("has_crossbow", False), web_save_data.get("has_electric", False),
+            web_save_data.get("has_freeze", False), web_save_data.get("has_dual_pistols", False),
+            web_save_data.get("has_throwing_knives", False))
 
 
-def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper):
+def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper,
+               has_flamethrower=False, has_laser=False, has_minigun=False, has_crossbow=False,
+               has_electric=False, has_freeze=False, has_dual_pistols=False, has_throwing_knives=False):
     """Save data for current user to localStorage"""
     global current_user, web_users, web_save_data
 
@@ -278,6 +292,14 @@ def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper):
             web_users[current_user]["has_shotgun"] = has_shotgun
             web_users[current_user]["medkit_charges"] = medkit_charges
             web_users[current_user]["has_sniper"] = has_sniper
+            web_users[current_user]["has_flamethrower"] = has_flamethrower
+            web_users[current_user]["has_laser"] = has_laser
+            web_users[current_user]["has_minigun"] = has_minigun
+            web_users[current_user]["has_crossbow"] = has_crossbow
+            web_users[current_user]["has_electric"] = has_electric
+            web_users[current_user]["has_freeze"] = has_freeze
+            web_users[current_user]["has_dual_pistols"] = has_dual_pistols
+            web_users[current_user]["has_throwing_knives"] = has_throwing_knives
             save_users_to_storage()
             return True
 
@@ -287,6 +309,14 @@ def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper):
     web_save_data["has_shotgun"] = has_shotgun
     web_save_data["medkit_charges"] = medkit_charges
     web_save_data["has_sniper"] = has_sniper
+    web_save_data["has_flamethrower"] = has_flamethrower
+    web_save_data["has_laser"] = has_laser
+    web_save_data["has_minigun"] = has_minigun
+    web_save_data["has_crossbow"] = has_crossbow
+    web_save_data["has_electric"] = has_electric
+    web_save_data["has_freeze"] = has_freeze
+    web_save_data["has_dual_pistols"] = has_dual_pistols
+    web_save_data["has_throwing_knives"] = has_throwing_knives
     storage_set(STORAGE_KEY_GUEST, web_save_data)
     return True
 
@@ -540,6 +570,30 @@ class Bullet:
                         elif self.weapon_type == "RPG":
                             # RPG has smoke trail
                             trail_color = (150, 150, 150)
+                        elif self.weapon_type == "Flamethrower":
+                            # Fire trail
+                            trail_color = (255, 100 + random.randint(0, 100), 0)
+                        elif self.weapon_type == "Laser":
+                            # Green glow trail
+                            trail_color = (0, 200, 0)
+                        elif self.weapon_type == "Minigun":
+                            # Brass trail
+                            trail_color = (180, 140, 60)
+                        elif self.weapon_type == "Crossbow":
+                            # Brown trail
+                            trail_color = (139, 69, 19)
+                        elif self.weapon_type == "Electric":
+                            # Electric blue trail
+                            trail_color = (100, 150, 255)
+                        elif self.weapon_type == "Freeze":
+                            # Ice blue trail
+                            trail_color = (150, 220, 255)
+                        elif self.weapon_type == "Dual Pistols":
+                            # Gold trail
+                            trail_color = (255, 215, 0)
+                        elif self.weapon_type == "Throwing Knives":
+                            # Silver trail
+                            trail_color = (192, 192, 192)
                         else:
                             trail_color = (255, 200, 100)
                         pygame.draw.circle(screen, trail_color, (int(tsx), int(tsy)), trail_size)
@@ -555,6 +609,22 @@ class Bullet:
                 self._draw_sniper_bullet(screen, sx, sy)
             elif self.weapon_type == "RPG":
                 self._draw_rpg_rocket(screen, sx, sy)
+            elif self.weapon_type == "Flamethrower":
+                self._draw_flamethrower(screen, sx, sy)
+            elif self.weapon_type == "Laser":
+                self._draw_laser(screen, sx, sy)
+            elif self.weapon_type == "Minigun":
+                self._draw_minigun(screen, sx, sy)
+            elif self.weapon_type == "Crossbow":
+                self._draw_crossbow(screen, sx, sy)
+            elif self.weapon_type == "Electric":
+                self._draw_electric(screen, sx, sy)
+            elif self.weapon_type == "Freeze":
+                self._draw_freeze(screen, sx, sy)
+            elif self.weapon_type == "Dual Pistols":
+                self._draw_dual_pistols(screen, sx, sy)
+            elif self.weapon_type == "Throwing Knives":
+                self._draw_throwing_knife(screen, sx, sy)
             else:
                 # Enemy bullets or default
                 self._draw_enemy_bullet(screen, sx, sy)
@@ -666,6 +736,107 @@ class Bullet:
         pygame.draw.circle(screen, (255, 200, 100), (int(sx), int(sy)), self.radius)
         # Hot center
         pygame.draw.circle(screen, (255, 255, 200), (int(sx), int(sy)), self.radius - 2)
+
+    def _draw_flamethrower(self, screen, sx, sy):
+        """Draw flamethrower fire particle"""
+        # Random flickering fire effect
+        size = self.radius + random.randint(-2, 3)
+        # Outer orange flame
+        pygame.draw.circle(screen, (255, 100, 0), (int(sx), int(sy)), size + 2)
+        # Inner yellow flame
+        pygame.draw.circle(screen, (255, 200, 0), (int(sx), int(sy)), size)
+        # Hot white core
+        pygame.draw.circle(screen, (255, 255, 150), (int(sx), int(sy)), max(1, size - 2))
+
+    def _draw_laser(self, screen, sx, sy):
+        """Draw laser beam - thin bright green line"""
+        beam_length = 15
+        tip_x = sx + math.cos(self.angle) * beam_length
+        tip_y = sy + math.sin(self.angle) * beam_length
+        # Glow effect
+        pygame.draw.line(screen, (0, 200, 0), (sx, sy), (tip_x, tip_y), 4)
+        # Bright core
+        pygame.draw.line(screen, (100, 255, 100), (sx, sy), (tip_x, tip_y), 2)
+        # Bright tip
+        pygame.draw.circle(screen, (200, 255, 200), (int(tip_x), int(tip_y)), 3)
+
+    def _draw_minigun(self, screen, sx, sy):
+        """Draw minigun bullet - small fast brass"""
+        bullet_length = 6
+        bullet_width = 2
+        tip_x = sx + math.cos(self.angle) * bullet_length
+        tip_y = sy + math.sin(self.angle) * bullet_length
+        pygame.draw.line(screen, (180, 140, 60), (sx, sy), (tip_x, tip_y), bullet_width)
+        pygame.draw.circle(screen, (200, 160, 80), (int(tip_x), int(tip_y)), 2)
+
+    def _draw_crossbow(self, screen, sx, sy):
+        """Draw crossbow bolt/arrow"""
+        bolt_length = 16
+        # Shaft (brown)
+        tip_x = sx + math.cos(self.angle) * bolt_length
+        tip_y = sy + math.sin(self.angle) * bolt_length
+        base_x = sx - math.cos(self.angle) * (bolt_length / 2)
+        base_y = sy - math.sin(self.angle) * (bolt_length / 2)
+        pygame.draw.line(screen, (120, 80, 40), (base_x, base_y), (tip_x, tip_y), 3)
+        # Metal tip
+        pygame.draw.line(screen, (150, 150, 150), (sx, sy), (tip_x, tip_y), 2)
+        # Fletching at back
+        fletch_angle1 = self.angle + 2.5
+        fletch_angle2 = self.angle - 2.5
+        f1_x = base_x + math.cos(fletch_angle1) * 5
+        f1_y = base_y + math.sin(fletch_angle1) * 5
+        f2_x = base_x + math.cos(fletch_angle2) * 5
+        f2_y = base_y + math.sin(fletch_angle2) * 5
+        pygame.draw.line(screen, (200, 50, 50), (base_x, base_y), (f1_x, f1_y), 2)
+        pygame.draw.line(screen, (200, 50, 50), (base_x, base_y), (f2_x, f2_y), 2)
+
+    def _draw_electric(self, screen, sx, sy):
+        """Draw electric bolt - zigzag lightning"""
+        # Electric blue core
+        pygame.draw.circle(screen, (100, 150, 255), (int(sx), int(sy)), 6)
+        pygame.draw.circle(screen, (200, 220, 255), (int(sx), int(sy)), 4)
+        pygame.draw.circle(screen, (255, 255, 255), (int(sx), int(sy)), 2)
+        # Random lightning sparks
+        for _ in range(3):
+            spark_x = sx + random.randint(-8, 8)
+            spark_y = sy + random.randint(-8, 8)
+            pygame.draw.line(screen, (150, 200, 255), (int(sx), int(sy)), (int(spark_x), int(spark_y)), 1)
+
+    def _draw_freeze(self, screen, sx, sy):
+        """Draw freeze ray - ice blue crystal"""
+        # Ice crystal shape
+        pygame.draw.circle(screen, (150, 220, 255), (int(sx), int(sy)), 5)
+        pygame.draw.circle(screen, (200, 240, 255), (int(sx), int(sy)), 3)
+        # Crystal spikes
+        for i in range(6):
+            spike_angle = i * (math.pi / 3)
+            spike_x = sx + math.cos(spike_angle) * 7
+            spike_y = sy + math.sin(spike_angle) * 7
+            pygame.draw.line(screen, (180, 230, 255), (int(sx), int(sy)), (int(spike_x), int(spike_y)), 1)
+
+    def _draw_dual_pistols(self, screen, sx, sy):
+        """Draw golden dual pistol bullet"""
+        bullet_length = 8
+        tip_x = sx + math.cos(self.angle) * bullet_length
+        tip_y = sy + math.sin(self.angle) * bullet_length
+        # Gold casing
+        pygame.draw.line(screen, (255, 215, 0), (sx, sy), (tip_x, tip_y), 3)
+        # Shine
+        pygame.draw.line(screen, (255, 240, 150), (sx, sy), (tip_x, tip_y), 1)
+
+    def _draw_throwing_knife(self, screen, sx, sy):
+        """Draw spinning throwing knife"""
+        knife_length = 12
+        # Spinning effect using lifetime
+        spin_angle = self.angle + (self.lifetime * 0.3)
+        tip_x = sx + math.cos(spin_angle) * knife_length
+        tip_y = sy + math.sin(spin_angle) * knife_length
+        base_x = sx - math.cos(spin_angle) * (knife_length / 2)
+        base_y = sy - math.sin(spin_angle) * (knife_length / 2)
+        # Blade
+        pygame.draw.line(screen, (192, 192, 192), (base_x, base_y), (tip_x, tip_y), 3)
+        # Shine on blade
+        pygame.draw.line(screen, (255, 255, 255), (sx, sy), (tip_x, tip_y), 1)
 
 
 class Grenade:
@@ -916,6 +1087,8 @@ class Robot:
         self.headshot_radius = 8  # Red dot target size for sniper headshots
         self.headshot_offset_y = -35  # Position above robot (above health bar)
         self.show_sniper_target = False  # Whether to show red dot (set by game when sniper is equipped)
+        self.freeze_timer = 0  # Freeze effect from freeze ray
+        self.base_speed = self.speed  # Store original speed
 
     def get_patrol_target(self):
         margin = 100
@@ -925,6 +1098,13 @@ class Robot:
         )
 
     def update(self, player_x, player_y, obstacles):
+        # Handle freeze timer
+        if self.freeze_timer > 0:
+            self.freeze_timer -= 1
+            self.speed = self.base_speed * 0.3  # 70% slow when frozen
+        else:
+            self.speed = self.base_speed
+
         # Distance to player
         dx = player_x - self.x
         dy = player_y - self.y
@@ -1055,12 +1235,25 @@ class Robot:
 
         # Only draw if on screen
         if -50 < sx < SCREEN_WIDTH + 50 and -50 < sy < SCREEN_HEIGHT + 50:
-            # Body color (flash white when hit)
-            body_color = WHITE if self.hit_flash > 0 else self.color
+            # Body color (flash white when hit, blue when frozen)
+            if self.hit_flash > 0:
+                body_color = WHITE
+            elif self.freeze_timer > 0:
+                body_color = (100, 150, 255)  # Ice blue when frozen
+            else:
+                body_color = self.color
 
             # Draw body
             pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
             pygame.draw.circle(screen, DARK_GRAY, (int(sx), int(sy)), self.radius, 2)
+
+            # Draw ice crystals when frozen
+            if self.freeze_timer > 0:
+                for i in range(4):
+                    crystal_angle = i * (math.pi / 2) + (self.freeze_timer * 0.02)
+                    cx = sx + math.cos(crystal_angle) * (self.radius + 5)
+                    cy = sy + math.sin(crystal_angle) * (self.radius + 5)
+                    pygame.draw.circle(screen, (200, 240, 255), (int(cx), int(cy)), 3)
 
             # Draw two red eyes
             eye_offset = 6  # Distance between eyes
@@ -1419,12 +1612,22 @@ class Player:
         ]
 
         # Load saved coins and unlocked weapons
-        saved_coins, saved_rpg, saved_shotgun, saved_medkit_charges, saved_sniper = load_save()
+        (saved_coins, saved_rpg, saved_shotgun, saved_medkit_charges, saved_sniper,
+         saved_flamethrower, saved_laser, saved_minigun, saved_crossbow,
+         saved_electric, saved_freeze, saved_dual_pistols, saved_throwing_knives) = load_save()
         self.coins = saved_coins
         self.has_rpg = saved_rpg
         self.has_shotgun = saved_shotgun
         self.has_sniper = saved_sniper
         self.medkit_charges = saved_medkit_charges  # Number of heals available
+        self.has_flamethrower = saved_flamethrower
+        self.has_laser = saved_laser
+        self.has_minigun = saved_minigun
+        self.has_crossbow = saved_crossbow
+        self.has_electric = saved_electric
+        self.has_freeze = saved_freeze
+        self.has_dual_pistols = saved_dual_pistols
+        self.has_throwing_knives = saved_throwing_knives
 
         # If Shotgun was unlocked, add it to weapons
         if self.has_shotgun:
@@ -1474,6 +1677,150 @@ class Player:
                 "gun_width": 4,
                 "melee": False,
                 "grenade": False
+            })
+
+        # If Flamethrower was unlocked, add it to weapons
+        if self.has_flamethrower:
+            self.weapons.append({
+                "name": "Flamethrower",
+                "ammo": 100,
+                "max_ammo": 100,
+                "reloads": 3,
+                "fire_rate": 2,  # Very fast
+                "damage": 8,  # Low per-hit but continuous
+                "bullet_speed": 8,
+                "color": (255, 100, 0),  # Orange-red
+                "gun_length": 16,
+                "gun_width": 8,
+                "melee": False,
+                "grenade": False,
+                "flamethrower": True
+            })
+
+        # If Laser was unlocked, add it to weapons
+        if self.has_laser:
+            self.weapons.append({
+                "name": "Laser",
+                "ammo": 50,
+                "max_ammo": 50,
+                "reloads": 4,
+                "fire_rate": 3,
+                "damage": 15,
+                "bullet_speed": 40,  # Very fast
+                "color": (0, 255, 0),  # Green laser
+                "gun_length": 14,
+                "gun_width": 5,
+                "melee": False,
+                "grenade": False,
+                "laser": True
+            })
+
+        # If Minigun was unlocked, add it to weapons
+        if self.has_minigun:
+            self.weapons.append({
+                "name": "Minigun",
+                "ammo": 200,
+                "max_ammo": 200,
+                "reloads": 2,
+                "fire_rate": 3,  # Very fast
+                "damage": 12,
+                "bullet_speed": 18,
+                "color": (180, 180, 180),  # Gray metal
+                "gun_length": 18,
+                "gun_width": 10,
+                "melee": False,
+                "grenade": False,
+                "minigun": True
+            })
+
+        # If Crossbow was unlocked, add it to weapons
+        if self.has_crossbow:
+            self.weapons.append({
+                "name": "Crossbow",
+                "ammo": 15,
+                "max_ammo": 15,
+                "reloads": 5,
+                "fire_rate": 40,  # Slow but powerful
+                "damage": 80,
+                "bullet_speed": 25,
+                "color": (139, 69, 19),  # Brown
+                "gun_length": 16,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "crossbow": True
+            })
+
+        # If Electric Gun was unlocked, add it to weapons
+        if self.has_electric:
+            self.weapons.append({
+                "name": "Electric",
+                "ammo": 30,
+                "max_ammo": 30,
+                "reloads": 4,
+                "fire_rate": 15,
+                "damage": 25,
+                "bullet_speed": 20,
+                "color": (100, 150, 255),  # Electric blue
+                "gun_length": 14,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "electric": True  # Chain lightning effect
+            })
+
+        # If Freeze Ray was unlocked, add it to weapons
+        if self.has_freeze:
+            self.weapons.append({
+                "name": "Freeze",
+                "ammo": 40,
+                "max_ammo": 40,
+                "reloads": 4,
+                "fire_rate": 8,
+                "damage": 10,
+                "bullet_speed": 15,
+                "color": (150, 220, 255),  # Ice blue
+                "gun_length": 14,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "freeze": True  # Slows enemies
+            })
+
+        # If Dual Pistols was unlocked, add it to weapons
+        if self.has_dual_pistols:
+            self.weapons.append({
+                "name": "Dual Pistols",
+                "ammo": 60,
+                "max_ammo": 60,
+                "reloads": 5,
+                "fire_rate": 4,  # Fast firing
+                "damage": 12,
+                "bullet_speed": 20,
+                "color": (255, 215, 0),  # Gold
+                "gun_length": 8,
+                "gun_width": 4,
+                "melee": False,
+                "grenade": False,
+                "dual_pistols": True
+            })
+
+        # If Throwing Knives was unlocked, add it to weapons
+        if self.has_throwing_knives:
+            self.weapons.append({
+                "name": "Throwing Knives",
+                "ammo": 20,
+                "max_ammo": 20,
+                "reloads": 6,
+                "fire_rate": 12,
+                "damage": 40,
+                "bullet_speed": 22,
+                "color": (192, 192, 192),  # Silver
+                "gun_length": 8,
+                "gun_width": 3,
+                "melee": False,
+                "grenade": False,
+                "throwing_knife": True
             })
 
     @property
@@ -1567,13 +1914,199 @@ class Player:
             return True
         return False
 
+    def unlock_flamethrower(self):
+        if not self.has_flamethrower and self.coins >= 80:
+            self.coins -= 80
+            self.has_flamethrower = True
+            self.weapons.append({
+                "name": "Flamethrower",
+                "ammo": 100,
+                "max_ammo": 100,
+                "reloads": 3,
+                "fire_rate": 2,
+                "damage": 8,
+                "bullet_speed": 8,
+                "color": (255, 100, 0),
+                "gun_length": 16,
+                "gun_width": 8,
+                "melee": False,
+                "grenade": False,
+                "flamethrower": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_laser(self):
+        if not self.has_laser and self.coins >= 120:
+            self.coins -= 120
+            self.has_laser = True
+            self.weapons.append({
+                "name": "Laser",
+                "ammo": 50,
+                "max_ammo": 50,
+                "reloads": 4,
+                "fire_rate": 3,
+                "damage": 15,
+                "bullet_speed": 40,
+                "color": (0, 255, 0),
+                "gun_length": 14,
+                "gun_width": 5,
+                "melee": False,
+                "grenade": False,
+                "laser": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_minigun(self):
+        if not self.has_minigun and self.coins >= 200:
+            self.coins -= 200
+            self.has_minigun = True
+            self.weapons.append({
+                "name": "Minigun",
+                "ammo": 200,
+                "max_ammo": 200,
+                "reloads": 2,
+                "fire_rate": 3,
+                "damage": 12,
+                "bullet_speed": 18,
+                "color": (180, 180, 180),
+                "gun_length": 18,
+                "gun_width": 10,
+                "melee": False,
+                "grenade": False,
+                "minigun": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_crossbow(self):
+        if not self.has_crossbow and self.coins >= 100:
+            self.coins -= 100
+            self.has_crossbow = True
+            self.weapons.append({
+                "name": "Crossbow",
+                "ammo": 15,
+                "max_ammo": 15,
+                "reloads": 5,
+                "fire_rate": 40,
+                "damage": 80,
+                "bullet_speed": 25,
+                "color": (139, 69, 19),
+                "gun_length": 16,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "crossbow": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_electric(self):
+        if not self.has_electric and self.coins >= 140:
+            self.coins -= 140
+            self.has_electric = True
+            self.weapons.append({
+                "name": "Electric",
+                "ammo": 30,
+                "max_ammo": 30,
+                "reloads": 4,
+                "fire_rate": 15,
+                "damage": 25,
+                "bullet_speed": 20,
+                "color": (100, 150, 255),
+                "gun_length": 14,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "electric": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_freeze(self):
+        if not self.has_freeze and self.coins >= 110:
+            self.coins -= 110
+            self.has_freeze = True
+            self.weapons.append({
+                "name": "Freeze",
+                "ammo": 40,
+                "max_ammo": 40,
+                "reloads": 4,
+                "fire_rate": 8,
+                "damage": 10,
+                "bullet_speed": 15,
+                "color": (150, 220, 255),
+                "gun_length": 14,
+                "gun_width": 6,
+                "melee": False,
+                "grenade": False,
+                "freeze": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_dual_pistols(self):
+        if not self.has_dual_pistols and self.coins >= 60:
+            self.coins -= 60
+            self.has_dual_pistols = True
+            self.weapons.append({
+                "name": "Dual Pistols",
+                "ammo": 60,
+                "max_ammo": 60,
+                "reloads": 5,
+                "fire_rate": 4,
+                "damage": 12,
+                "bullet_speed": 20,
+                "color": (255, 215, 0),
+                "gun_length": 8,
+                "gun_width": 4,
+                "melee": False,
+                "grenade": False,
+                "dual_pistols": True
+            })
+            self.save_progress()
+            return True
+        return False
+
+    def unlock_throwing_knives(self):
+        if not self.has_throwing_knives and self.coins >= 70:
+            self.coins -= 70
+            self.has_throwing_knives = True
+            self.weapons.append({
+                "name": "Throwing Knives",
+                "ammo": 20,
+                "max_ammo": 20,
+                "reloads": 6,
+                "fire_rate": 12,
+                "damage": 40,
+                "bullet_speed": 22,
+                "color": (192, 192, 192),
+                "gun_length": 8,
+                "gun_width": 3,
+                "melee": False,
+                "grenade": False,
+                "throwing_knife": True
+            })
+            self.save_progress()
+            return True
+        return False
+
     def add_coin(self, amount=1):
         self.coins += amount
         self.save_progress()  # Auto-save when coins are added
 
     def save_progress(self):
         """Save coins and weapon unlocks"""
-        return save_game(self.coins, self.has_rpg, self.has_shotgun, self.medkit_charges, self.has_sniper)
+        return save_game(self.coins, self.has_rpg, self.has_shotgun, self.medkit_charges, self.has_sniper,
+                        self.has_flamethrower, self.has_laser, self.has_minigun, self.has_crossbow,
+                        self.has_electric, self.has_freeze, self.has_dual_pistols, self.has_throwing_knives)
 
     def use_medkit(self):
         """Use a medkit charge to heal to full HP"""
@@ -3025,8 +3558,48 @@ class Game:
                         self.state = "playing"
                     elif event.key == pygame.K_4:
                         # Buy Sniper
-                        if not self.player.has_sniper and self.player.coins >= 100:
+                        if not self.player.has_sniper and self.player.coins >= 150:
                             self.player.unlock_sniper()
+                        self.state = "playing"
+                    elif event.key == pygame.K_5:
+                        # Buy Dual Pistols
+                        if not self.player.has_dual_pistols and self.player.coins >= 60:
+                            self.player.unlock_dual_pistols()
+                        self.state = "playing"
+                    elif event.key == pygame.K_6:
+                        # Buy Throwing Knives
+                        if not self.player.has_throwing_knives and self.player.coins >= 70:
+                            self.player.unlock_throwing_knives()
+                        self.state = "playing"
+                    elif event.key == pygame.K_7:
+                        # Buy Flamethrower
+                        if not self.player.has_flamethrower and self.player.coins >= 80:
+                            self.player.unlock_flamethrower()
+                        self.state = "playing"
+                    elif event.key == pygame.K_8:
+                        # Buy Crossbow
+                        if not self.player.has_crossbow and self.player.coins >= 100:
+                            self.player.unlock_crossbow()
+                        self.state = "playing"
+                    elif event.key == pygame.K_9:
+                        # Buy Freeze Ray
+                        if not self.player.has_freeze and self.player.coins >= 110:
+                            self.player.unlock_freeze()
+                        self.state = "playing"
+                    elif event.key == pygame.K_0:
+                        # Buy Laser Gun
+                        if not self.player.has_laser and self.player.coins >= 120:
+                            self.player.unlock_laser()
+                        self.state = "playing"
+                    elif event.key == pygame.K_e:
+                        # Buy Electric Gun
+                        if not self.player.has_electric and self.player.coins >= 140:
+                            self.player.unlock_electric()
+                        self.state = "playing"
+                    elif event.key == pygame.K_m:
+                        # Buy Minigun
+                        if not self.player.has_minigun and self.player.coins >= 200:
+                            self.player.unlock_minigun()
                         self.state = "playing"
                     elif event.key == pygame.K_ESCAPE or event.key == pygame.K_n:
                         # Close shop - stop auto-prompting
@@ -3477,6 +4050,18 @@ class Game:
                                 damage = 150 if is_headshot else 50
                             else:
                                 damage = bullet.get_damage()
+
+                            # Special effects for certain weapon types
+                            if bullet.weapon_type == "Freeze":
+                                robot.freeze_timer = 120  # Slow for 2 seconds
+                            elif bullet.weapon_type == "Electric":
+                                # Chain lightning - damage nearby robots too
+                                for other_robot in self.robots:
+                                    if other_robot != robot:
+                                        other_dist = math.sqrt((robot.x - other_robot.x)**2 + (robot.y - other_robot.y)**2)
+                                        if other_dist < 150:  # Chain range
+                                            other_robot.take_damage(damage // 2)
+                                            other_robot.hit_flash = 10
 
                             if robot.take_damage(damage):
                                 self.robots.remove(robot)
@@ -4399,9 +4984,9 @@ class Game:
         overlay.set_alpha(200)
         self.screen.blit(overlay, (0, 0))
 
-        # Shop box
-        box_width = 600
-        box_height = 470
+        # Shop box - 2 columns layout
+        box_width = 1100
+        box_height = 650
         box_x = SCREEN_WIDTH // 2 - box_width // 2
         box_y = SCREEN_HEIGHT // 2 - box_height // 2
 
@@ -4410,65 +4995,169 @@ class Game:
 
         # Title
         title = self.big_font.render("SHOP", True, YELLOW)
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, box_y + 15))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, box_y + 10))
 
         # Coins
         coins = self.font.render(f"Your Coins: {self.player.coins}", True, GREEN)
-        self.screen.blit(coins, (SCREEN_WIDTH // 2 - coins.get_width() // 2, box_y + 70))
+        self.screen.blit(coins, (SCREEN_WIDTH // 2 - coins.get_width() // 2, box_y + 50))
 
-        # Shop items
-        item_y = box_y + 115
+        # Column settings
+        col1_x = box_x + 25
+        col2_x = box_x + box_width // 2 + 15
+        item_height = 48
+        start_y = box_y + 90
+
+        # Left column items
+        item_y = start_y
 
         # Item 1: Shotgun
         if not self.player.has_shotgun:
-            shotgun_color = WHITE if self.player.coins >= 10 else GRAY
-            shotgun_text = self.font.render("[1] Shotgun - 10 coins", True, shotgun_color)
-            shotgun_desc = self.small_font.render("50 Damage close, 10 far | 30 Ammo", True, ORANGE)
+            color = WHITE if self.player.coins >= 10 else GRAY
+            text = self.small_font.render("[1] Shotgun - 10c", True, color)
+            desc = self.small_font.render("Spread shot | 30 Ammo", True, ORANGE)
         else:
-            shotgun_text = self.font.render("[1] Shotgun - OWNED", True, GREEN)
-            shotgun_desc = self.small_font.render("Already unlocked!", True, GREEN)
-        self.screen.blit(shotgun_text, (box_x + 30, item_y))
-        self.screen.blit(shotgun_desc, (box_x + 30, item_y + 30))
+            text = self.small_font.render("[1] Shotgun - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
 
         # Item 2: RPG
-        item_y += 70
+        item_y += item_height
         if not self.player.has_rpg:
-            rpg_color = WHITE if self.player.coins >= 50 else GRAY
-            rpg_text = self.font.render("[2] RPG - 50 coins", True, rpg_color)
-            rpg_desc = self.small_font.render("50 Damage | 1 Ammo | 10 Reloads", True, RED)
+            color = WHITE if self.player.coins >= 50 else GRAY
+            text = self.small_font.render("[2] RPG - 50c", True, color)
+            desc = self.small_font.render("Explosive | 1 Ammo, 10 Reloads", True, RED)
         else:
-            rpg_text = self.font.render("[2] RPG - OWNED", True, GREEN)
-            rpg_desc = self.small_font.render("Already unlocked!", True, GREEN)
-        self.screen.blit(rpg_text, (box_x + 30, item_y))
-        self.screen.blit(rpg_desc, (box_x + 30, item_y + 30))
+            text = self.small_font.render("[2] RPG - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
 
-        # Item 3: Medkit (one-time purchase)
-        item_y += 70
+        # Item 3: Medkit
+        item_y += item_height
         if self.player.medkit_charges > 0:
-            medkit_text = self.font.render("[3] Medkit - OWNED", True, GREEN)
-            medkit_desc = self.small_font.render(f"You have {self.player.medkit_charges} charges | Press H to use", True, GREEN)
+            text = self.small_font.render(f"[3] Medkit - {self.player.medkit_charges} charges", True, GREEN)
+            desc = self.small_font.render("Press H to heal", True, GREEN)
         else:
-            medkit_color = WHITE if self.player.coins >= 90 else GRAY
-            medkit_text = self.font.render("[3] Medkit - 90 coins", True, medkit_color)
-            medkit_desc = self.small_font.render("Gives 3 heals | Press H to use", True, GREEN)
-        self.screen.blit(medkit_text, (box_x + 30, item_y))
-        self.screen.blit(medkit_desc, (box_x + 30, item_y + 30))
+            color = WHITE if self.player.coins >= 90 else GRAY
+            text = self.small_font.render("[3] Medkit - 90c", True, color)
+            desc = self.small_font.render("3 heals | Press H", True, (0, 200, 0))
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
 
         # Item 4: Sniper
-        item_y += 70
+        item_y += item_height
         if not self.player.has_sniper:
-            sniper_color = WHITE if self.player.coins >= 150 else GRAY
-            sniper_text = self.font.render("[4] Sniper - 150 coins", True, sniper_color)
-            sniper_desc = self.small_font.render("150 Damage | 5 Ammo | Very Fast Bullet", True, (0, 255, 255))
+            color = WHITE if self.player.coins >= 150 else GRAY
+            text = self.small_font.render("[4] Sniper - 150c", True, color)
+            desc = self.small_font.render("150 Dmg | Headshot bonus", True, (0, 255, 255))
         else:
-            sniper_text = self.font.render("[4] Sniper - OWNED", True, GREEN)
-            sniper_desc = self.small_font.render("Already unlocked!", True, GREEN)
-        self.screen.blit(sniper_text, (box_x + 30, item_y))
-        self.screen.blit(sniper_desc, (box_x + 30, item_y + 30))
+            text = self.small_font.render("[4] Sniper - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
+
+        # Item 5: Dual Pistols
+        item_y += item_height
+        if not self.player.has_dual_pistols:
+            color = WHITE if self.player.coins >= 60 else GRAY
+            text = self.small_font.render("[5] Dual Pistols - 60c", True, color)
+            desc = self.small_font.render("Fast fire | 60 Ammo", True, (255, 215, 0))
+        else:
+            text = self.small_font.render("[5] Dual Pistols - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
+
+        # Item 6: Throwing Knives
+        item_y += item_height
+        if not self.player.has_throwing_knives:
+            color = WHITE if self.player.coins >= 70 else GRAY
+            text = self.small_font.render("[6] Throwing Knives - 70c", True, color)
+            desc = self.small_font.render("40 Dmg | Silent kill", True, (192, 192, 192))
+        else:
+            text = self.small_font.render("[6] Throwing Knives - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col1_x, item_y))
+        self.screen.blit(desc, (col1_x, item_y + 20))
+
+        # Right column items
+        item_y = start_y
+
+        # Item 7: Flamethrower
+        if not self.player.has_flamethrower:
+            color = WHITE if self.player.coins >= 80 else GRAY
+            text = self.small_font.render("[7] Flamethrower - 80c", True, color)
+            desc = self.small_font.render("Continuous fire | 100 Fuel", True, (255, 100, 0))
+        else:
+            text = self.small_font.render("[7] Flamethrower - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
+
+        # Item 8: Crossbow
+        item_y += item_height
+        if not self.player.has_crossbow:
+            color = WHITE if self.player.coins >= 100 else GRAY
+            text = self.small_font.render("[8] Crossbow - 100c", True, color)
+            desc = self.small_font.render("80 Dmg | Slow but powerful", True, (139, 69, 19))
+        else:
+            text = self.small_font.render("[8] Crossbow - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
+
+        # Item 9: Freeze Ray
+        item_y += item_height
+        if not self.player.has_freeze:
+            color = WHITE if self.player.coins >= 110 else GRAY
+            text = self.small_font.render("[9] Freeze Ray - 110c", True, color)
+            desc = self.small_font.render("Slows enemies | 40 Ammo", True, (150, 220, 255))
+        else:
+            text = self.small_font.render("[9] Freeze Ray - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
+
+        # Item 0: Laser Gun
+        item_y += item_height
+        if not self.player.has_laser:
+            color = WHITE if self.player.coins >= 120 else GRAY
+            text = self.small_font.render("[0] Laser Gun - 120c", True, color)
+            desc = self.small_font.render("Super fast bullet | 50 Ammo", True, (0, 255, 0))
+        else:
+            text = self.small_font.render("[0] Laser Gun - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
+
+        # Item -: Electric Gun
+        item_y += item_height
+        if not self.player.has_electric:
+            color = WHITE if self.player.coins >= 140 else GRAY
+            text = self.small_font.render("[E] Electric Gun - 140c", True, color)
+            desc = self.small_font.render("Chain lightning | 30 Ammo", True, (100, 150, 255))
+        else:
+            text = self.small_font.render("[E] Electric Gun - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
+
+        # Item M: Minigun
+        item_y += item_height
+        if not self.player.has_minigun:
+            color = WHITE if self.player.coins >= 200 else GRAY
+            text = self.small_font.render("[M] Minigun - 200c", True, color)
+            desc = self.small_font.render("200 Ammo | Very fast fire", True, (180, 180, 180))
+        else:
+            text = self.small_font.render("[M] Minigun - OWNED", True, GREEN)
+            desc = self.small_font.render("Unlocked!", True, GREEN)
+        self.screen.blit(text, (col2_x, item_y))
+        self.screen.blit(desc, (col2_x, item_y + 20))
 
         # Close option
         close_text = self.font.render("[ESC] Close Shop", True, RED)
-        self.screen.blit(close_text, (SCREEN_WIDTH // 2 - close_text.get_width() // 2, box_y + 420))
+        self.screen.blit(close_text, (SCREEN_WIDTH // 2 - close_text.get_width() // 2, box_y + box_height - 40))
 
     def draw(self):
         if self.state == "login":

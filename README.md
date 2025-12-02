@@ -27,14 +27,25 @@ A top-down 2D arena shooter game built with Python and Pygame. Fight waves of ro
 | P | Reload |
 
 ### Weapons
+**Starting Weapons:**
 - **Rifle** - Balanced automatic weapon (30 rounds, 5 reloads)
 - **Handgun** - Fast firing pistol (40 rounds, 4 reloads)
 - **Knife** - Melee weapon, no ammo needed
 - **Grenade** - Explosive, area damage (10 grenades)
-- **Shotgun** - Spread shot, high close-range damage (30 shells) - *Shop: 10 coins*
-- **RPG** - Rocket launcher with explosions (1 rocket, 10 reloads) - *Shop: 50 coins*
-- **Sniper** - High damage, long range, headshot bonus (5 rounds) - *Shop: 150 coins*
-- **Medkit** - Heals to full HP, 3 charges - *Shop: 90 coins*
+
+**Shop Weapons:**
+- **Shotgun** - Spread shot, high close-range damage (30 shells) - *10 coins*
+- **RPG** - Rocket launcher with explosions (1 rocket, 10 reloads) - *50 coins*
+- **Dual Pistols** - Fast firing golden pistols (60 rounds) - *60 coins*
+- **Throwing Knives** - Silent ranged attack (20 knives, spinning effect) - *70 coins*
+- **Flamethrower** - Continuous fire stream (100 fuel) - *80 coins*
+- **Medkit** - Heals to full HP, 3 charges - *90 coins*
+- **Crossbow** - High damage bolts (15 bolts, 80 damage) - *100 coins*
+- **Freeze Ray** - Slows enemies for 2 seconds (40 ammo) - *110 coins*
+- **Laser Gun** - Super fast green laser (50 ammo) - *120 coins*
+- **Electric Gun** - Chain lightning hits nearby enemies (30 ammo) - *140 coins*
+- **Sniper** - Headshot bonus, 150 damage (5 rounds) - *150 coins*
+- **Minigun** - Massive ammo capacity, very fast fire (200 rounds) - *200 coins*
 
 ### Game Modes
 
@@ -201,11 +212,12 @@ ani-games/
 ## Features
 
 - 4 difficulty levels + boss fight
-- 8 unique weapons with realistic visuals
+- 16 unique weapons with realistic visuals and special effects
+- Special weapon effects: Freeze Ray slows enemies, Electric Gun chains to nearby targets
 - Shell casings and muzzle flash effects
 - Reload animations
 - Healing effects with medkit
-- Shop system with persistent coins
+- Shop system with persistent coins (12 shop weapons)
 - Minimap
 - Procedurally generated music
 - 5 different map layouts
