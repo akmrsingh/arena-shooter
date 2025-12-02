@@ -3012,8 +3012,17 @@ class Game:
 
     def reset_game(self):
         # Player 1 starts on left side, Player 2 on right side (for PvP/coop)
-        if self.game_mode in ["pvp", "online_pvp"]:
-            # PvP modes - players on opposite sides
+        if self.game_mode == "online_pvp":
+            # Online PvP - host spawns left, joiner spawns right
+            if self.is_host:
+                self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+            else:
+                # Joiner spawns on right side, sees host on left
+                self.player = Player(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.player2 = Player2(MAP_WIDTH // 4, MAP_HEIGHT // 2)
+        elif self.game_mode == "pvp":
+            # Local PvP - players on opposite sides
             self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
             self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
         elif self.game_mode in ["coop", "online_coop"]:
