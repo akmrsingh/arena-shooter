@@ -3977,6 +3977,8 @@ class Game:
                             if not remote.weapon.get("melee", False):
                                 result = remote.shoot()
                                 if result:
+                                    # Mark bullet as from player2 for PvP collision detection
+                                    result.owner = "player2"
                                     self.bullets.append(result)
 
                 except json.JSONDecodeError:
