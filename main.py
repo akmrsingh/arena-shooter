@@ -2962,6 +2962,8 @@ class Game:
         self.online_difficulty = "medium"  # Difficulty for online co-op
         self.online_difficulty_options = ["easy", "medium", "hard", "impossible"]
         self.online_difficulty_index = 1  # Default to medium
+        self.player_name = ""  # Local player's display name
+        self.remote_player_name = ""  # Remote player's display name
 
         # Login system
         self.username_input = ""
@@ -3889,6 +3891,8 @@ class Game:
 
             if status == "connected":
                 self.online_message = "Connected! Starting game..."
+                # Set player name from login username
+                self.player_name = self.username_input if self.username_input else "Player"
                 # Start the game in selected online mode
                 if self.online_game_mode == "pvp":
                     self.game_mode = "online_pvp"
@@ -3926,7 +3930,8 @@ class Game:
                 "angle": player.angle,
                 "health": player.health,
                 "weapon_idx": player.weapon_idx if hasattr(player, 'weapon_idx') else 0,
-                "shooting": pygame.mouse.get_pressed()[0]
+                "shooting": pygame.mouse.get_pressed()[0],
+                "name": self.player_name if self.player_name else self.username_input
             }
 
             window.MP.sendData(json.dumps(state))
@@ -3962,6 +3967,10 @@ class Game:
                         remote.y = state.get("y", remote.y)
                         remote.angle = state.get("angle", remote.angle)
                         # Don't sync health directly, let damage happen locally
+
+                        # Get remote player name
+                        if state.get("name"):
+                            self.remote_player_name = state.get("name")
 
                         # Handle remote shooting
                         if state.get("shooting") and hasattr(remote, 'shoot'):
@@ -4488,6 +4497,10 @@ class Game:
         if self.player2 and self.player2.health > 0:
             self.player2.draw(surface, camera)
 
+        # Draw player names in online multiplayer
+        if self.game_mode in ["online_coop", "online_pvp"]:
+            self.draw_player_names(surface, camera)
+
         # Draw muzzle flashes
         for flash in self.muzzle_flashes:
             flash.draw(surface, camera)
@@ -4495,6 +4508,36 @@ class Game:
         # Draw healing effects
         for effect in self.healing_effects:
             effect.draw(surface, camera)
+
+    def draw_player_names(self, surface, camera):
+        """Draw player names above players in online multiplayer"""
+        name_font = pygame.font.SysFont('Arial', 14)
+
+        # Draw local player name (YOU)
+        if self.player and self.player.health > 0:
+            local_name = self.player_name if self.player_name else self.username_input
+            if local_name:
+                sx, sy = camera.apply(self.player.x, self.player.y)
+                # Add "(You)" suffix to distinguish
+                display_name = f"{local_name} (You)"
+                name_surface = name_font.render(display_name, True, (100, 200, 255))
+                name_x = sx - name_surface.get_width() // 2
+                name_y = sy - self.player.radius - 35
+                # Background for readability
+                bg_rect = pygame.Rect(name_x - 3, name_y - 2, name_surface.get_width() + 6, name_surface.get_height() + 4)
+                pygame.draw.rect(surface, (0, 0, 0, 150), bg_rect, border_radius=3)
+                surface.blit(name_surface, (name_x, name_y))
+
+        # Draw remote player name
+        if self.player2 and self.player2.health > 0 and self.remote_player_name:
+            sx, sy = camera.apply(self.player2.x, self.player2.y)
+            name_surface = name_font.render(self.remote_player_name, True, (255, 150, 100))
+            name_x = sx - name_surface.get_width() // 2
+            name_y = sy - self.player2.radius - 35
+            # Background for readability
+            bg_rect = pygame.Rect(name_x - 3, name_y - 2, name_surface.get_width() + 6, name_surface.get_height() + 4)
+            pygame.draw.rect(surface, (0, 0, 0, 150), bg_rect, border_radius=3)
+            surface.blit(name_surface, (name_x, name_y))
 
     def draw_split_screen_hud(self, surface, player, is_player1, width):
         """Draw HUD for one player in split-screen mode"""
