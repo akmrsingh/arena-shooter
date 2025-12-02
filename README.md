@@ -1,6 +1,6 @@
 # Arena Shooter 2D - Robot Battle
 
-A top-down 2D arena shooter game built with Python and Pygame. Fight waves of robot enemies, unlock weapons, and survive!
+A top-down 2D arena shooter game built with Python and Pygame. Fight waves of robot enemies, unlock weapons, and survive! Now with online multiplayer!
 
 ## How to Play
 
@@ -17,21 +17,48 @@ A top-down 2D arena shooter game built with Python and Pygame. Fight waves of ro
 | TAB | Open Shop |
 | ESC | Return to Menu |
 
+### Player 2 Controls (Local Multiplayer)
+| Key | Action |
+|-----|--------|
+| IJKL | Move |
+| Numpad 1-9 | Aim (8 directions) |
+| Numpad 0 | Shoot |
+| O | Switch Weapon |
+| P | Reload |
+
 ### Weapons
-- **Rifle** - Balanced automatic weapon (30 rounds)
-- **Handgun** - Fast firing pistol (12 rounds)
+- **Rifle** - Balanced automatic weapon (30 rounds, 5 reloads)
+- **Handgun** - Fast firing pistol (40 rounds, 4 reloads)
 - **Knife** - Melee weapon, no ammo needed
-- **Grenade** - Explosive, area damage (3 grenades)
-- **Shotgun** - Spread shot, high close-range damage (8 shells) - *Shop: 10 coins*
-- **RPG** - Rocket launcher with explosions (3 rockets) - *Shop: 50 coins*
-- **Sniper** - High damage, long range (5 rounds) - *Shop: 150 coins*
+- **Grenade** - Explosive, area damage (10 grenades)
+- **Shotgun** - Spread shot, high close-range damage (30 shells) - *Shop: 10 coins*
+- **RPG** - Rocket launcher with explosions (1 rocket, 10 reloads) - *Shop: 50 coins*
+- **Sniper** - High damage, long range, headshot bonus (5 rounds) - *Shop: 150 coins*
 - **Medkit** - Heals to full HP, 3 charges - *Shop: 90 coins*
 
 ### Game Modes
+
+#### Solo Modes
 1. **Easy** - 8 robots, low damage
 2. **Medium** - 15 robots, moderate difficulty
 3. **Hard** - 25 robots, high damage and speed
 4. **Impossible** - 5 waves + BOSS fight!
+
+#### Local Multiplayer
+- **[C] Co-op** - Team up with Player 2 against robots
+- **[V] 1v1 PvP** - Fight against Player 2 (split-screen)
+
+#### Online Multiplayer
+- **[0] Online Co-op** - Team up with a friend online against robots
+- **[P] Online PvP** - Fight against a friend online (1v1)
+
+### Maps
+Choose from 5 different map layouts:
+- **Random** - Procedurally generated obstacles
+- **Arena** - Central arena with surrounding walls
+- **Corridors** - Narrow hallways and rooms
+- **Fortress** - Four corner fortresses with center cross
+- **Open** - Mostly open space with few pillars
 
 ### Tips
 - Use cover! Hide behind obstacles to avoid enemy fire
@@ -39,6 +66,8 @@ A top-down 2D arena shooter game built with Python and Pygame. Fight waves of ro
 - Save coins to buy powerful weapons from the shop
 - The minimap (bottom-right) shows enemy positions
 - Reload before engaging large groups
+- Sniper headshots deal 150 damage (red dot appears on enemies)
+- In co-op, game continues if one player dies (other can still win!)
 
 ---
 
@@ -65,6 +94,8 @@ cd build/web
 python3 -m http.server 8000
 ```
 Then open http://localhost:8000 in your browser.
+
+**Play online:** https://akmrsingh.itch.io/2d-shooter-game
 
 ---
 
@@ -156,6 +187,7 @@ ani-games/
 ├── save_data.json      # Save file (coins, unlocks)
 └── web_build/
     ├── main.py         # Web-compatible version
+    ├── multiplayer.js  # PeerJS multiplayer module
     ├── README.md       # This file
     └── build/
         └── web/        # Deployable web files
@@ -176,11 +208,15 @@ ani-games/
 - Shop system with persistent coins
 - Minimap
 - Procedurally generated music
+- 5 different map layouts
+- Local multiplayer (Co-op & PvP)
+- Online multiplayer via WebRTC/PeerJS
+- Sniper headshot system with red dot targeting
 
 ## Web Version Notes
 
 - Progress saves during session only (resets on page refresh)
-- Multiplayer not available in web version
+- Online multiplayer available via room codes
 - Works best in Chrome/Firefox/Edge
 
 ---
@@ -189,5 +225,6 @@ ani-games/
 
 Built with Python and Pygame
 Web version powered by Pygbag
+Online multiplayer powered by PeerJS
 
 Enjoy the game!
