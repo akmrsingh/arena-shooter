@@ -3338,8 +3338,16 @@ class Game:
             self.camera.update(self.player.x, self.player.y)
             if self.player2:
                 self.camera2.update(self.player2.x, self.player2.y)
-        elif self.player2 and self.player2.health > 0 and self.player.health > 0:
-            # Co-op modes (local and online): focus on midpoint between players
+        elif self.game_mode == "online_pvp":
+            # Online PvP: camera follows only your own player (no split-screen needed)
+            self.camera.update(self.player.x, self.player.y)
+        elif self.game_mode == "online_coop" and self.player2 and self.player2.health > 0 and self.player.health > 0:
+            # Online co-op: focus on midpoint between players
+            mid_x = (self.player.x + self.player2.x) // 2
+            mid_y = (self.player.y + self.player2.y) // 2
+            self.camera.update(mid_x, mid_y)
+        elif self.game_mode == "coop" and self.player2 and self.player2.health > 0 and self.player.health > 0:
+            # Local co-op: focus on midpoint between players
             mid_x = (self.player.x + self.player2.x) // 2
             mid_y = (self.player.y + self.player2.y) // 2
             self.camera.update(mid_x, mid_y)
