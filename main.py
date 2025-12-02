@@ -1448,9 +1448,9 @@ class Player:
         if self.has_rpg:
             self.weapons.append({
                 "name": "RPG",
-                "ammo": 5,
-                "max_ammo": 5,
-                "reloads": 2,
+                "ammo": 1,
+                "max_ammo": 1,
+                "reloads": 10,
                 "fire_rate": 60,
                 "damage": 50,
                 "bullet_speed": 10,
@@ -1528,9 +1528,9 @@ class Player:
             # Add RPG to weapons
             self.weapons.append({
                 "name": "RPG",
-                "ammo": 5,
-                "max_ammo": 5,
-                "reloads": 2,
+                "ammo": 1,
+                "max_ammo": 1,
+                "reloads": 10,
                 "fire_rate": 60,  # Very slow
                 "damage": 50,
                 "bullet_speed": 10,
@@ -4435,7 +4435,7 @@ class Game:
         if not self.player.has_rpg:
             rpg_color = WHITE if self.player.coins >= 50 else GRAY
             rpg_text = self.font.render("[2] RPG - 50 coins", True, rpg_color)
-            rpg_desc = self.small_font.render("50 Damage | 5 Ammo | Very Slow", True, RED)
+            rpg_desc = self.small_font.render("50 Damage | 1 Ammo | 10 Reloads", True, RED)
         else:
             rpg_text = self.font.render("[2] RPG - OWNED", True, GREEN)
             rpg_desc = self.small_font.render("Already unlocked!", True, GREEN)
