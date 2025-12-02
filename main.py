@@ -4260,28 +4260,29 @@ class Game:
 
             # Second separator
             pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 140), (box_x + box_width - 20, box_y + 140), 1)
-            host_y_offset = 45
+            options_start_y = box_y + 155
         else:
-            host_y_offset = 0
+            # PvP mode - no difficulty selector, start options after separator
+            options_start_y = box_y + 110
 
         # Options
         host_text = self.font.render("[H] HOST GAME", True, GREEN)
         host_desc = self.small_font.render("Create a room and share code with friend", True, GRAY)
-        self.screen.blit(host_text, (box_x + 30, box_y + 110 + host_y_offset))
-        self.screen.blit(host_desc, (box_x + 30, box_y + 145 + host_y_offset))
+        self.screen.blit(host_text, (box_x + 30, options_start_y))
+        self.screen.blit(host_desc, (box_x + 30, options_start_y + 35))
 
         join_text = self.font.render("[J] JOIN GAME", True, YELLOW)
         join_desc = self.small_font.render("Enter 4-digit room code to join friend", True, GRAY)
-        self.screen.blit(join_text, (box_x + 30, box_y + 190 + host_y_offset))
-        self.screen.blit(join_desc, (box_x + 30, box_y + 225 + host_y_offset))
+        self.screen.blit(join_text, (box_x + 30, options_start_y + 80))
+        self.screen.blit(join_desc, (box_x + 30, options_start_y + 115))
 
         # Room code input (if joining)
         if self.online_input_active or len(self.online_input_code) > 0:
             code_label = self.font.render("Room Code:", True, WHITE)
-            self.screen.blit(code_label, (box_x + 30, box_y + 270 + host_y_offset))
+            self.screen.blit(code_label, (box_x + 30, options_start_y + 160))
 
             # Code input box
-            code_box = pygame.Rect(box_x + 180, box_y + 265 + host_y_offset, 150, 40)
+            code_box = pygame.Rect(box_x + 180, options_start_y + 155, 150, 40)
             pygame.draw.rect(self.screen, (60, 60, 80), code_box)
             pygame.draw.rect(self.screen, YELLOW, code_box, 2)
 
@@ -4290,16 +4291,16 @@ class Game:
 
             if len(self.online_input_code) == 4:
                 enter_hint = self.small_font.render("Press ENTER to join", True, GREEN)
-                self.screen.blit(enter_hint, (box_x + 180, box_y + 310 + host_y_offset))
+                self.screen.blit(enter_hint, (box_x + 180, options_start_y + 200))
 
         # Message
         if self.online_message:
             msg = self.font.render(self.online_message, True, ORANGE)
-            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, box_y + 350 + host_y_offset))
+            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, options_start_y + 240))
 
         # Back option
         back_text = self.small_font.render("[ESC] Back to Menu", True, RED)
-        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, box_y + 385 + host_y_offset))
+        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, options_start_y + 275))
 
         # Version
         version = self.small_font.render("v3.0", True, WHITE)
