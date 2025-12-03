@@ -150,7 +150,7 @@ STORAGE_KEY_GUEST = "arena_shooter_guest"
 
 # Fallback in-memory storage
 web_save_data = {
-    "coins": 0, "has_rpg": False, "has_shotgun": False, "medkit_charges": 0, "has_sniper": False,
+    "coins": 10000, "has_rpg": False, "has_shotgun": False, "medkit_charges": 0, "has_sniper": False,
     "has_flamethrower": False, "has_laser": False, "has_minigun": False, "has_crossbow": False,
     "has_electric": False, "has_freeze": False, "has_dual_pistols": False, "has_throwing_knives": False
 }
