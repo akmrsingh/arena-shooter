@@ -4803,11 +4803,19 @@ class Game:
             oh = max(2, int(obs.height * scale))
             pygame.draw.rect(self.screen, BROWN, (ox, oy, ow, oh))
 
-        # Draw robots (knife bots = white, gun bots = red)
+        # Draw robots with different colors by type
         for robot in self.robots:
             rx = map_x + int(robot.x * scale)
             ry = map_y + int(robot.y * scale)
-            robot_color = WHITE if robot.knife_only else RED
+            # Color by bot type
+            if robot.bot_type == "knife":
+                robot_color = WHITE
+            elif robot.bot_type == "throwing_knife":
+                robot_color = GRAY  # Gray for throwing knife bots
+            elif robot.bot_type == "dual_pistol":
+                robot_color = (255, 215, 0)  # Gold for dual pistol bots
+            else:  # gun bots
+                robot_color = RED
             pygame.draw.circle(self.screen, robot_color, (rx, ry), 3)
 
         # Draw player
