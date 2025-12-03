@@ -2973,6 +2973,13 @@ class Game:
         self.login_message = ""
         self.active_input = "username"  # "username" or "passcode"
 
+        # Login screen touch button rects (initialized in draw_login_screen)
+        self.login_submit_btn = None
+        self.login_toggle_btn = None
+        self.login_guest_btn = None
+        self.username_field_rect = None
+        self.passcode_field_rect = None
+
         # Web version: disable music (too slow to generate in browser)
         self.boss_music = None
         self.menu_music = None
@@ -3441,6 +3448,55 @@ class Game:
 
     def handle_touch_events(self, event):
         """Handle touch/mouse events for mobile controls"""
+        # Handle login screen touch events (always, not just mobile_controls)
+        if self.state == "login":
+            if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+                if event.type == pygame.FINGERDOWN:
+                    x = event.x * SCREEN_WIDTH
+                    y = event.y * SCREEN_HEIGHT
+                else:
+                    x, y = event.pos
+
+                # Check if tapping on username field
+                if self.username_field_rect and self.username_field_rect.collidepoint(x, y):
+                    self.active_input = "username"
+                    return
+
+                # Check if tapping on passcode field
+                if self.passcode_field_rect and self.passcode_field_rect.collidepoint(x, y):
+                    self.active_input = "passcode"
+                    return
+
+                # Check submit button
+                if self.login_submit_btn and self.login_submit_btn.collidepoint(x, y):
+                    if self.login_mode == "register":
+                        success, msg = register_user(self.username_input, self.passcode_input)
+                        self.login_message = msg
+                        if success:
+                            login_user(self.username_input, self.passcode_input)
+                            pygame.key.stop_text_input()
+                            self.state = "menu"
+                    else:
+                        success, msg = login_user(self.username_input, self.passcode_input)
+                        self.login_message = msg
+                        if success:
+                            pygame.key.stop_text_input()
+                            self.state = "menu"
+                    return
+
+                # Check toggle button (switch between login/register)
+                if self.login_toggle_btn and self.login_toggle_btn.collidepoint(x, y):
+                    self.login_mode = "register" if self.login_mode == "login" else "login"
+                    self.login_message = ""
+                    return
+
+                # Check guest button
+                if self.login_guest_btn and self.login_guest_btn.collidepoint(x, y):
+                    pygame.key.stop_text_input()
+                    self.state = "menu"
+                    return
+            return
+
         if not self.mobile_controls or self.state != "playing":
             return
 
@@ -4873,21 +4929,52 @@ class Game:
             msg_render = self.small_font.render(self.login_message, True, msg_color)
             self.screen.blit(msg_render, (SCREEN_WIDTH // 2 - msg_render.get_width() // 2, box_y + 235))
 
-        # Instructions
-        instructions = [
-            "[TAB] Switch field | [ENTER] Submit",
-            "[R] Toggle Register/Login | [ESC] Play as Guest"
-        ]
-        y = box_y + 270
-        for instr in instructions:
-            instr_text = self.small_font.render(instr, True, GRAY)
-            self.screen.blit(instr_text, (SCREEN_WIDTH // 2 - instr_text.get_width() // 2, y))
-            y += 22
+        # Touch-friendly buttons
+        btn_y = box_y + 230
+        btn_height = 40
+        btn_margin = 10
+
+        # Submit button
+        submit_btn_x = box_x + 25
+        submit_btn_width = (box_width - 60) // 2
+        pygame.draw.rect(self.screen, (50, 150, 50), (submit_btn_x, btn_y, submit_btn_width, btn_height))
+        pygame.draw.rect(self.screen, GREEN, (submit_btn_x, btn_y, submit_btn_width, btn_height), 2)
+        submit_text = self.font.render("SUBMIT", True, WHITE)
+        self.screen.blit(submit_text, (submit_btn_x + submit_btn_width // 2 - submit_text.get_width() // 2, btn_y + 8))
+        self.login_submit_btn = pygame.Rect(submit_btn_x, btn_y, submit_btn_width, btn_height)
+
+        # Register/Login toggle button
+        toggle_btn_x = box_x + 25 + submit_btn_width + btn_margin
+        toggle_text_str = "REGISTER" if self.login_mode == "login" else "LOGIN"
+        pygame.draw.rect(self.screen, (100, 100, 150), (toggle_btn_x, btn_y, submit_btn_width, btn_height))
+        pygame.draw.rect(self.screen, LIGHT_BLUE, (toggle_btn_x, btn_y, submit_btn_width, btn_height), 2)
+        toggle_text = self.font.render(toggle_text_str, True, WHITE)
+        self.screen.blit(toggle_text, (toggle_btn_x + submit_btn_width // 2 - toggle_text.get_width() // 2, btn_y + 8))
+        self.login_toggle_btn = pygame.Rect(toggle_btn_x, btn_y, submit_btn_width, btn_height)
+
+        # Guest button (full width below)
+        guest_btn_y = btn_y + btn_height + btn_margin
+        guest_btn_width = box_width - 50
+        pygame.draw.rect(self.screen, (150, 100, 50), (box_x + 25, guest_btn_y, guest_btn_width, btn_height))
+        pygame.draw.rect(self.screen, ORANGE, (box_x + 25, guest_btn_y, guest_btn_width, btn_height), 2)
+        guest_text = self.font.render("PLAY AS GUEST", True, WHITE)
+        self.screen.blit(guest_text, (SCREEN_WIDTH // 2 - guest_text.get_width() // 2, guest_btn_y + 8))
+        self.login_guest_btn = pygame.Rect(box_x + 25, guest_btn_y, guest_btn_width, btn_height)
+
+        # Store input field rects for touch
+        self.username_field_rect = pygame.Rect(box_x + 25, username_y + 25, box_width - 50, 35)
+        self.passcode_field_rect = pygame.Rect(box_x + 25, passcode_y + 25, box_width - 50, 35)
+
+        # Message (success/error)
+        if self.login_message:
+            msg_color = GREEN if "success" in self.login_message.lower() or "created" in self.login_message.lower() else RED
+            msg_render = self.small_font.render(self.login_message, True, msg_color)
+            self.screen.blit(msg_render, (SCREEN_WIDTH // 2 - msg_render.get_width() // 2, guest_btn_y + btn_height + 10))
 
         # Show current user if logged in
         if current_user:
             user_text = self.small_font.render(f"Logged in as: {current_user}", True, GREEN)
-            self.screen.blit(user_text, (SCREEN_WIDTH // 2 - user_text.get_width() // 2, box_y + box_height + 15))
+            self.screen.blit(user_text, (SCREEN_WIDTH // 2 - user_text.get_width() // 2, box_y + box_height + 30))
 
     def draw_menu(self):
         self.screen.fill(DARK_GRAY)
