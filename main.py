@@ -386,9 +386,13 @@ class VirtualJoystick:
         self.dx = 0  # -1 to 1
         self.dy = 0  # -1 to 1
 
-    def handle_touch_down(self, x, y, touch_id):
+    def contains_point(self, x, y):
+        """Check if a point is within the joystick touch area"""
         dist = math.sqrt((x - self.base_x)**2 + (y - self.base_y)**2)
-        if dist < self.radius * 1.5:
+        return dist < self.radius * 1.5
+
+    def handle_touch_down(self, x, y, touch_id):
+        if self.contains_point(x, y):
             self.active = True
             self.touch_id = touch_id
             self.update_knob(x, y)
@@ -450,9 +454,13 @@ class TouchButton:
         self.pressed = False
         self.touch_id = None
 
-    def handle_touch_down(self, x, y, touch_id):
+    def contains_point(self, x, y):
+        """Check if a point is within the button touch area"""
         dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
-        if dist < self.radius:
+        return dist < self.radius
+
+    def handle_touch_down(self, x, y, touch_id):
+        if self.contains_point(x, y):
             self.pressed = True
             self.touch_id = touch_id
             return True
@@ -3058,6 +3066,7 @@ class Game:
         self.switch_btn = TouchButton(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 140, 30, "Q", (150, 150, 60))
         self.medkit_btn = TouchButton(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 60, 30, "H", (60, 200, 60))
         self.touch_aim_angle = 0
+        self.touch_shooting = False  # Track if touching screen (not on controls) for shooting
 
         self.reset_game()
 
@@ -3650,6 +3659,15 @@ class Game:
                 x, y = event.pos
                 touch_id = 0
 
+            # Check if touch is on any control
+            on_joystick = self.joystick.contains_point(x, y) or self.aim_joystick.contains_point(x, y)
+            on_button = (self.shoot_btn.contains_point(x, y) or self.reload_btn.contains_point(x, y) or
+                        self.switch_btn.contains_point(x, y) or self.medkit_btn.contains_point(x, y))
+
+            # If touch is NOT on any control, it's a shooting touch
+            if not on_joystick and not on_button:
+                self.touch_shooting = True
+
             # Check joystick
             self.joystick.handle_touch_down(x, y, touch_id)
             # Check aim joystick
@@ -3676,6 +3694,8 @@ class Game:
         elif event.type == pygame.FINGERUP or event.type == pygame.MOUSEBUTTONUP:
             self.joystick.handle_touch_up(touch_id)
             self.aim_joystick.handle_touch_up(touch_id + 100)
+            # Reset touch shooting
+            self.touch_shooting = False
             # Handle button releases and actions
             if self.reload_btn.pressed and self.reload_btn.touch_id == touch_id:
                 if not self.player.reloading:
@@ -4017,10 +4037,17 @@ class Game:
                             self.bullets.append(result)
 
         # Continuous shooting while mouse held (not for melee or grenade)
-        # Skip mouse shooting on mobile if using joysticks (let shoot button handle it)
+        # On mobile: only shoot if touching screen (not on joystick/buttons) OR shoot button pressed
         if self.state == "playing":
-            using_joystick = self.mobile_controls and (self.joystick.active or self.aim_joystick.active)
-            if pygame.mouse.get_pressed()[0] and not using_joystick and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
+            should_shoot = False
+            if self.mobile_controls:
+                # On mobile: shoot if touching outside controls OR fire button pressed
+                should_shoot = self.touch_shooting or self.shoot_btn.pressed
+            else:
+                # On desktop: use mouse click
+                should_shoot = pygame.mouse.get_pressed()[0]
+
+            if should_shoot and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
                 result = self.player.shoot()
                 if result:
                     self.bullets.append(result)
@@ -4246,21 +4273,13 @@ class Game:
                 aim_y = self.player.y - self.camera.y + math.sin(self.touch_aim_angle) * 100
                 mouse_pos = (aim_x, aim_y)
 
-        # Handle mobile shooting (continuous fire while button held)
-        if self.mobile_controls and self.shoot_btn.pressed:
-            # Use aim joystick direction or last known direction
-            if self.aim_joystick.active or (abs(self.aim_joystick.dx) > 0.1 or abs(self.aim_joystick.dy) > 0.1):
+        # Handle mobile shooting (FIRE button or touch screen outside controls)
+        # Note: main shooting logic is in handle_events, this handles melee and effects
+        if self.mobile_controls and (self.shoot_btn.pressed or self.touch_shooting):
+            if self.player.weapon.get("melee", False):
                 result = self.player.shoot()
-                if result:
-                    if isinstance(result, dict) and result.get("melee"):
-                        self.handle_melee_attack(result)
-                    else:
-                        self.bullets.append(result)
-                        # Add shell casing and muzzle flash
-                        if self.player.weapon.get("casing", True) and not self.player.weapon.get("melee"):
-                            self.shell_casings.append(ShellCasing(self.player.x, self.player.y, self.player.angle))
-                        if not self.player.weapon.get("melee"):
-                            self.muzzle_flashes.append(MuzzleFlash(self.player.x, self.player.y, self.player.angle))
+                if result and isinstance(result, dict) and result.get("melee"):
+                    self.handle_melee_attack(result)
 
         # Update player
         self.player.update(keys, mouse_pos, self.camera, self.obstacles)
