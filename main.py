@@ -4017,8 +4017,10 @@ class Game:
                             self.bullets.append(result)
 
         # Continuous shooting while mouse held (not for melee or grenade)
+        # Skip mouse shooting on mobile if using joysticks (let shoot button handle it)
         if self.state == "playing":
-            if pygame.mouse.get_pressed()[0] and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
+            using_joystick = self.mobile_controls and (self.joystick.active or self.aim_joystick.active)
+            if pygame.mouse.get_pressed()[0] and not using_joystick and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
                 result = self.player.shoot()
                 if result:
                     self.bullets.append(result)
