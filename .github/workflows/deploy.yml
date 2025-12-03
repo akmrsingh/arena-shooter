@@ -36,6 +36,74 @@ jobs:
           # Add multiplayer.js script to index.html before </body>
           sed -i 's|</body>|<script src="multiplayer.js"></script>\n</body>|' build/web/index.html
 
+      - name: Add touch support for mobile
+        run: |
+          # Add touch event handler script to make "Ready to start" work on mobile
+          cat >> build/web/touch_start.js << 'TOUCHEOF'
+          // Touch support for mobile - triggers user media engagement
+          (function() {
+            var canvas = document.getElementById('canvas');
+            var engaged = false;
+            var overlay = null;
+
+            // Create tap to start overlay for mobile
+            function createOverlay() {
+              overlay = document.createElement('div');
+              overlay.id = 'tap-overlay';
+              overlay.innerHTML = '<div style="font-size: 24px; font-weight: bold;">TAP TO START</div><div style="font-size: 14px; margin-top: 10px;">Touch anywhere to begin</div>';
+              overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; font-family: Arial, sans-serif; cursor: pointer;';
+              document.body.appendChild(overlay);
+            }
+
+            function removeOverlay() {
+              if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+                overlay = null;
+              }
+            }
+
+            function triggerEngagement(e) {
+              if (engaged) return;
+              engaged = true;
+              console.log('Touch/click engagement triggered');
+
+              // Remove overlay
+              removeOverlay();
+
+              // Try to set UME flag if MM exists
+              if (window.MM && !window.MM.UME) {
+                window.MM.UME = true;
+              }
+
+              // Focus canvas for keyboard input
+              if (canvas) {
+                canvas.focus();
+              }
+            }
+
+            // Check if mobile/touch device
+            var isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            if (isTouchDevice) {
+              createOverlay();
+            }
+
+            // Listen for both touch and click
+            document.addEventListener('touchstart', triggerEngagement, {passive: true});
+            document.addEventListener('click', triggerEngagement);
+            document.addEventListener('touchend', triggerEngagement, {passive: true});
+
+            // Also add listeners to canvas specifically
+            if (canvas) {
+              canvas.addEventListener('touchstart', triggerEngagement, {passive: true});
+              canvas.addEventListener('click', triggerEngagement);
+            }
+
+            console.log('Touch support initialized, isTouchDevice:', isTouchDevice);
+          })();
+          TOUCHEOF
+          # Add touch_start.js to index.html before </body>
+          sed -i 's|</body>|<script src="touch_start.js"></script>\n</body>|' build/web/index.html
+
       - name: Verify build
         run: |
           ls -la build/web/
