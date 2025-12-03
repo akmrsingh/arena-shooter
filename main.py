@@ -332,16 +332,17 @@ SCREEN_HEIGHT = 720
 MAP_WIDTH = 5000
 MAP_HEIGHT = 5000
 
-# Mobile detection - check for actual mobile devices, not just browser
+# Mobile detection - check for touch devices
 IS_MOBILE = False
+IS_TOUCH_DEVICE = False
 try:
     from platform import window
     # Check user agent for mobile devices
     user_agent = window.navigator.userAgent.lower()
-    is_touch = hasattr(window, 'ontouchstart') or window.navigator.maxTouchPoints > 0
+    IS_TOUCH_DEVICE = hasattr(window, 'ontouchstart') or window.navigator.maxTouchPoints > 0
     is_mobile_ua = any(x in user_agent for x in ['android', 'iphone', 'ipad', 'ipod', 'mobile', 'tablet'])
-    # Only enable mobile controls if it's actually a mobile/tablet device
-    IS_MOBILE = is_mobile_ua and is_touch
+    # Enable mobile controls for touch devices OR mobile user agents
+    IS_MOBILE = IS_TOUCH_DEVICE or is_mobile_ua
 except:
     pass
 
@@ -3611,6 +3612,9 @@ class Game:
                         self.selected_map = self.map_names[self.map_index]
                     elif event.key == pygame.K_ESCAPE:
                         return False
+                    elif event.key == pygame.K_t:
+                        # Toggle touch controls
+                        self.mobile_controls = not self.mobile_controls
 
                 elif self.state == "playing":
                     # Player 1 controls
@@ -3638,6 +3642,9 @@ class Game:
                         self.state = "menu"
                         self.game_mode = "solo"
                         self.play_menu_music()
+                    elif event.key == pygame.K_t:
+                        # Toggle touch controls
+                        self.mobile_controls = not self.mobile_controls
 
                     # Player 2 controls (only in multiplayer modes)
                     if self.player2 and self.player2.health > 0:
@@ -4952,7 +4959,13 @@ class Game:
 
         # Controls hint
         controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
-        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 690))
+        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 680))
+
+        # Touch controls hint
+        touch_status = "ON" if self.mobile_controls else "OFF"
+        touch_color = GREEN if self.mobile_controls else GRAY
+        touch_hint = self.small_font.render(f"[T] Touch Controls: {touch_status}", True, touch_color)
+        self.screen.blit(touch_hint, (SCREEN_WIDTH // 2 - touch_hint.get_width() // 2, 700))
 
     def draw_gameover(self):
         # Darken screen

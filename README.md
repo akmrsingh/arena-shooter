@@ -16,6 +16,17 @@ A top-down 2D arena shooter game built with Python and Pygame. Fight waves of ro
 | Enter | Knife Attack (when knife equipped) |
 | TAB | Open Shop |
 | ESC | Return to Menu |
+| T | Toggle Touch Controls |
+
+### Touch Controls (Mobile/Tablet)
+- **Left Joystick** - Move player
+- **Right Joystick** - Aim direction
+- **FIRE Button** - Shoot weapon
+- **R Button** - Reload
+- **Q Button** - Switch weapon
+- **H Button** - Use medkit
+
+*Press T to toggle touch controls on/off*
 
 ### Player 2 Controls (Local Multiplayer)
 | Key | Action |
