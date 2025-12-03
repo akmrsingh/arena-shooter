@@ -564,73 +564,75 @@ class Bullet:
                     alpha = (i + 1) / len(self.trail)
                     trail_size = int(self.radius * 0.5 * alpha)
                     if trail_size > 0:
-                        if self.weapon_type == "Sniper":
+                        wt = self.weapon_type
+                        if wt in ["Sniper", "Barrett M82"]:
                             # Sniper has a longer, thinner trail
                             trail_color = (200, 220, 255)
-                        elif self.weapon_type == "Shotgun":
+                        elif wt in ["Shotgun", "Remington 870"]:
                             # Shotgun pellets have orange trail
                             trail_color = (255, 150, 50)
-                        elif self.weapon_type == "RPG":
+                        elif wt in ["RPG", "RPG-7"]:
                             # RPG has smoke trail
                             trail_color = (150, 150, 150)
-                        elif self.weapon_type == "Flamethrower":
+                        elif wt in ["Flamethrower", "M2 Flamethrower"]:
                             # Fire trail
                             trail_color = (255, 100 + random.randint(0, 100), 0)
-                        elif self.weapon_type == "Laser":
+                        elif wt in ["Laser", "XM-25 Laser"]:
                             # Green glow trail
                             trail_color = (0, 200, 0)
-                        elif self.weapon_type == "Minigun":
+                        elif wt in ["Minigun", "M134 Minigun"]:
                             # Brass trail
                             trail_color = (180, 140, 60)
-                        elif self.weapon_type == "Crossbow":
+                        elif wt in ["Crossbow", "Compound Crossbow"]:
                             # Brown trail
                             trail_color = (139, 69, 19)
-                        elif self.weapon_type == "Electric":
+                        elif wt in ["Electric", "Tesla Arc Gun"]:
                             # Electric blue trail
                             trail_color = (100, 150, 255)
-                        elif self.weapon_type == "Freeze":
+                        elif wt in ["Freeze", "Cryo Blaster"]:
                             # Ice blue trail
                             trail_color = (150, 220, 255)
-                        elif self.weapon_type == "Dual Pistols":
+                        elif wt in ["Dual Pistols", "Dual Desert Eagles"]:
                             # Gold trail
                             trail_color = (255, 215, 0)
-                        elif self.weapon_type == "Throwing Knives":
+                        elif wt in ["Throwing Knives", "Kunai Blades"]:
                             # Silver trail
                             trail_color = (192, 192, 192)
                         else:
                             trail_color = (255, 200, 100)
                         pygame.draw.circle(screen, trail_color, (int(tsx), int(tsy)), trail_size)
 
-            # Draw bullet based on weapon type
-            if self.weapon_type == "Rifle":
+            # Draw bullet based on weapon type (supports old and new names)
+            wt = self.weapon_type
+            if wt in ["Rifle", "M4A1"]:
                 self._draw_rifle_bullet(screen, sx, sy)
-            elif self.weapon_type == "Handgun":
+            elif wt in ["Handgun", "Glock 17"]:
                 self._draw_handgun_bullet(screen, sx, sy)
-            elif self.weapon_type == "Shotgun":
+            elif wt in ["Shotgun", "Remington 870"]:
                 self._draw_shotgun_pellet(screen, sx, sy)
-            elif self.weapon_type == "Sniper":
+            elif wt in ["Sniper", "Barrett M82"]:
                 self._draw_sniper_bullet(screen, sx, sy)
-            elif self.weapon_type == "RPG":
+            elif wt in ["RPG", "RPG-7"]:
                 self._draw_rpg_rocket(screen, sx, sy)
-            elif self.weapon_type == "Flamethrower":
+            elif wt in ["Flamethrower", "M2 Flamethrower"]:
                 self._draw_flamethrower(screen, sx, sy)
-            elif self.weapon_type == "Laser":
+            elif wt in ["Laser", "XM-25 Laser"]:
                 self._draw_laser(screen, sx, sy)
-            elif self.weapon_type == "Minigun":
+            elif wt in ["Minigun", "M134 Minigun"]:
                 self._draw_minigun(screen, sx, sy)
-            elif self.weapon_type == "Crossbow":
+            elif wt in ["Crossbow", "Compound Crossbow"]:
                 self._draw_crossbow(screen, sx, sy)
-            elif self.weapon_type == "Electric":
+            elif wt in ["Electric", "Tesla Arc Gun"]:
                 self._draw_electric(screen, sx, sy)
-            elif self.weapon_type == "Freeze":
+            elif wt in ["Freeze", "Cryo Blaster"]:
                 self._draw_freeze(screen, sx, sy)
-            elif self.weapon_type == "Dual Pistols":
+            elif wt in ["Dual Pistols", "Dual Desert Eagles"]:
                 self._draw_dual_pistols(screen, sx, sy)
-            elif self.weapon_type == "Throwing Knives":
+            elif wt in ["Throwing Knives", "Kunai Blades"]:
                 self._draw_throwing_knife(screen, sx, sy)
-            elif self.weapon_type == "Enemy_Knife":
+            elif wt == "Enemy_Knife":
                 self._draw_enemy_knife(screen, sx, sy)
-            elif self.weapon_type == "Enemy_Pistol":
+            elif wt == "Enemy_Pistol":
                 self._draw_enemy_pistol(screen, sx, sy)
             else:
                 # Enemy bullets or default
@@ -1701,13 +1703,27 @@ class Player:
         self.reload_duration = 60  # frames (1 second at 60fps)
         self.reload_phase = 0  # 0-1 progress through reload
 
-        # Weapon system
-        self.current_weapon = 0  # 0 = rifle, 1 = pistol, 2 = rpg (if unlocked)
+        # Weapon system - Realistic stats based on real firearms
+        self.current_weapon = 0
+        self.recoil = 0  # Current recoil offset (visual kickback)
+        self.max_recoil = 0  # Max recoil for current weapon
         self.weapons = [
-            {"name": "Rifle", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 10, "damage": 25, "bullet_speed": 15, "color": YELLOW, "gun_length": 12, "gun_width": 6, "melee": False, "grenade": False},
-            {"name": "Handgun", "ammo": 40, "max_ammo": 40, "reloads": 4, "fire_rate": 5, "damage": 10, "bullet_speed": 18, "color": (255, 200, 100), "gun_length": 8, "gun_width": 4, "melee": False, "grenade": False},
-            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20, "damage": 30, "bullet_speed": 0, "color": WHITE, "gun_length": 10, "gun_width": 3, "melee": True, "grenade": False},
-            {"name": "Grenade", "ammo": 10, "max_ammo": 10, "reloads": 0, "fire_rate": 45, "damage": 100, "bullet_speed": 0, "color": (100, 80, 60), "gun_length": 6, "gun_width": 6, "melee": False, "grenade": True, "no_reload": True}
+            # M4A1 Carbine - 5.56mm, 30 round STANAG mag, ~700 RPM
+            {"name": "M4A1", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 6, "damage": 28,
+             "bullet_speed": 22, "color": (255, 220, 100), "gun_length": 24, "gun_width": 5,
+             "melee": False, "grenade": False, "recoil": 3, "reload_time": 90, "caliber": "5.56mm"},
+            # Glock 17 - 9mm, 17 round mag, semi-auto
+            {"name": "Glock 17", "ammo": 17, "max_ammo": 17, "reloads": 6, "fire_rate": 8, "damage": 18,
+             "bullet_speed": 20, "color": (255, 200, 100), "gun_length": 10, "gun_width": 4,
+             "melee": False, "grenade": False, "recoil": 2, "reload_time": 60, "caliber": "9mm"},
+            # Combat Knife - Ka-Bar style
+            {"name": "Combat Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20,
+             "damage": 45, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
+             "melee": True, "grenade": False, "recoil": 0},
+            # M67 Frag Grenade
+            {"name": "M67 Frag", "ammo": 4, "max_ammo": 4, "reloads": 0, "fire_rate": 50, "damage": 150,
+             "bullet_speed": 0, "color": (80, 100, 80), "gun_length": 6, "gun_width": 6,
+             "melee": False, "grenade": True, "no_reload": True, "recoil": 0}
         ]
 
         # Load saved coins and unlocked weapons
@@ -1728,198 +1744,233 @@ class Player:
         self.has_dual_pistols = saved_dual_pistols
         self.has_throwing_knives = saved_throwing_knives
 
-        # If Shotgun was unlocked, add it to weapons
+        # Remington 870 - 12 gauge pump-action, 8 shell tube mag
         if self.has_shotgun:
             self.weapons.append({
-                "name": "Shotgun",
-                "ammo": 30,
-                "max_ammo": 30,
-                "reloads": 3,
-                "fire_rate": 30,
-                "damage": 50,  # Base damage, modified by distance
-                "bullet_speed": 12,
-                "color": ORANGE,
-                "gun_length": 14,
-                "gun_width": 7,
+                "name": "Remington 870",
+                "ammo": 8,
+                "max_ammo": 8,
+                "reloads": 4,
+                "fire_rate": 35,  # Pump action delay
+                "damage": 65,  # Per pellet, spread damage
+                "bullet_speed": 18,
+                "color": (255, 140, 50),
+                "gun_length": 28,
+                "gun_width": 6,
                 "melee": False,
                 "grenade": False,
-                "shotgun": True
+                "shotgun": True,
+                "recoil": 6,
+                "reload_time": 120,
+                "caliber": "12ga"
             })
 
-        # If RPG was unlocked, add it to weapons
+        # RPG-7 - Soviet rocket-propelled grenade launcher
         if self.has_rpg:
             self.weapons.append({
-                "name": "RPG",
+                "name": "RPG-7",
                 "ammo": 1,
                 "max_ammo": 1,
-                "reloads": 10,
-                "fire_rate": 60,
-                "damage": 50,
-                "bullet_speed": 10,
-                "color": RED,
-                "gun_length": 18,
-                "gun_width": 8
-            })
-
-        # If Sniper was unlocked, add it to weapons
-        if self.has_sniper:
-            self.weapons.append({
-                "name": "Sniper",
-                "ammo": 5,
-                "max_ammo": 5,
-                "reloads": 3,
-                "fire_rate": 60,
-                "damage": 150,
-                "bullet_speed": 30,
-                "color": (0, 255, 255),
-                "gun_length": 20,
-                "gun_width": 4,
-                "melee": False,
-                "grenade": False
-            })
-
-        # If Flamethrower was unlocked, add it to weapons
-        if self.has_flamethrower:
-            self.weapons.append({
-                "name": "Flamethrower",
-                "ammo": 100,
-                "max_ammo": 100,
-                "reloads": 3,
-                "fire_rate": 2,  # Very fast
-                "damage": 8,  # Low per-hit but continuous
-                "bullet_speed": 8,
-                "color": (255, 100, 0),  # Orange-red
-                "gun_length": 16,
+                "reloads": 8,
+                "fire_rate": 90,  # Slow reload between shots
+                "damage": 200,  # Massive explosive damage
+                "bullet_speed": 12,
+                "color": (255, 80, 50),
+                "gun_length": 32,
                 "gun_width": 8,
                 "melee": False,
                 "grenade": False,
-                "flamethrower": True
+                "recoil": 8,
+                "reload_time": 150,
+                "caliber": "40mm"
             })
 
-        # If Laser was unlocked, add it to weapons
+        # Barrett M82 - .50 BMG anti-materiel rifle
+        if self.has_sniper:
+            self.weapons.append({
+                "name": "Barrett M82",
+                "ammo": 10,
+                "max_ammo": 10,
+                "reloads": 3,
+                "fire_rate": 50,  # Bolt action style
+                "damage": 180,  # One-shot potential
+                "bullet_speed": 35,  # Very fast
+                "color": (100, 255, 255),
+                "gun_length": 38,
+                "gun_width": 5,
+                "melee": False,
+                "grenade": False,
+                "recoil": 10,  # Heavy recoil
+                "reload_time": 120,
+                "caliber": ".50 BMG"
+            })
+
+        # M2 Flamethrower - WWII style incendiary weapon
+        if self.has_flamethrower:
+            self.weapons.append({
+                "name": "M2 Flamethrower",
+                "ammo": 100,
+                "max_ammo": 100,
+                "reloads": 2,
+                "fire_rate": 2,  # Continuous stream
+                "damage": 12,  # DOT damage
+                "bullet_speed": 10,
+                "color": (255, 120, 30),
+                "gun_length": 26,
+                "gun_width": 7,
+                "melee": False,
+                "grenade": False,
+                "flamethrower": True,
+                "recoil": 1,
+                "reload_time": 180,
+                "caliber": "Napalm"
+            })
+
+        # XM-25 Laser Rifle - Experimental directed energy weapon
         if self.has_laser:
             self.weapons.append({
-                "name": "Laser",
+                "name": "XM-25 Laser",
                 "ammo": 50,
                 "max_ammo": 50,
                 "reloads": 4,
                 "fire_rate": 3,
-                "damage": 15,
-                "bullet_speed": 40,  # Very fast
-                "color": (0, 255, 0),  # Green laser
-                "gun_length": 14,
+                "damage": 18,
+                "bullet_speed": 50,  # Light speed (instant)
+                "color": (50, 255, 50),
+                "gun_length": 22,
                 "gun_width": 5,
                 "melee": False,
                 "grenade": False,
-                "laser": True
+                "laser": True,
+                "recoil": 0,  # No recoil
+                "reload_time": 90,
+                "caliber": "Photon"
             })
 
-        # If Minigun was unlocked, add it to weapons
+        # M134 Minigun - 7.62mm rotary machine gun, 3000 RPM
         if self.has_minigun:
             self.weapons.append({
-                "name": "Minigun",
+                "name": "M134 Minigun",
                 "ammo": 200,
                 "max_ammo": 200,
                 "reloads": 2,
-                "fire_rate": 3,  # Very fast
-                "damage": 12,
-                "bullet_speed": 18,
-                "color": (180, 180, 180),  # Gray metal
-                "gun_length": 18,
+                "fire_rate": 2,  # 3000 RPM
+                "damage": 15,
+                "bullet_speed": 24,
+                "color": (200, 180, 50),
+                "gun_length": 30,
                 "gun_width": 10,
                 "melee": False,
                 "grenade": False,
-                "minigun": True
+                "minigun": True,
+                "recoil": 2,  # Constant mild recoil
+                "reload_time": 180,
+                "caliber": "7.62mm"
             })
 
-        # If Crossbow was unlocked, add it to weapons
+        # Compound Crossbow - Modern tactical crossbow
         if self.has_crossbow:
             self.weapons.append({
-                "name": "Crossbow",
-                "ammo": 15,
-                "max_ammo": 15,
+                "name": "Compound Crossbow",
+                "ammo": 12,
+                "max_ammo": 12,
                 "reloads": 5,
-                "fire_rate": 40,  # Slow but powerful
-                "damage": 80,
-                "bullet_speed": 25,
-                "color": (139, 69, 19),  # Brown
-                "gun_length": 16,
-                "gun_width": 6,
+                "fire_rate": 45,  # Slow reload
+                "damage": 90,  # High damage per bolt
+                "bullet_speed": 28,
+                "color": (160, 82, 45),
+                "gun_length": 20,
+                "gun_width": 8,
                 "melee": False,
                 "grenade": False,
-                "crossbow": True
+                "crossbow": True,
+                "recoil": 1,
+                "reload_time": 100,
+                "caliber": "Bolt"
             })
 
-        # If Electric Gun was unlocked, add it to weapons
+        # Tesla Arc Gun - Experimental chain lightning weapon
         if self.has_electric:
             self.weapons.append({
-                "name": "Electric",
+                "name": "Tesla Arc Gun",
                 "ammo": 30,
                 "max_ammo": 30,
                 "reloads": 4,
-                "fire_rate": 15,
-                "damage": 25,
-                "bullet_speed": 20,
-                "color": (100, 150, 255),  # Electric blue
-                "gun_length": 14,
+                "fire_rate": 12,
+                "damage": 30,
+                "bullet_speed": 25,
+                "color": (100, 180, 255),
+                "gun_length": 18,
                 "gun_width": 6,
                 "melee": False,
                 "grenade": False,
-                "electric": True  # Chain lightning effect
+                "electric": True,
+                "recoil": 2,
+                "reload_time": 90,
+                "caliber": "Arc"
             })
 
-        # If Freeze Ray was unlocked, add it to weapons
+        # Cryo Blaster - Cryogenic freezing weapon
         if self.has_freeze:
             self.weapons.append({
-                "name": "Freeze",
+                "name": "Cryo Blaster",
                 "ammo": 40,
                 "max_ammo": 40,
                 "reloads": 4,
-                "fire_rate": 8,
-                "damage": 10,
-                "bullet_speed": 15,
-                "color": (150, 220, 255),  # Ice blue
-                "gun_length": 14,
+                "fire_rate": 6,
+                "damage": 14,
+                "bullet_speed": 18,
+                "color": (150, 230, 255),
+                "gun_length": 20,
                 "gun_width": 6,
                 "melee": False,
                 "grenade": False,
-                "freeze": True  # Slows enemies
+                "freeze": True,
+                "recoil": 1,
+                "reload_time": 90,
+                "caliber": "Cryo"
             })
 
-        # If Dual Pistols was unlocked, add it to weapons
+        # Desert Eagle Akimbo - Twin .50 AE hand cannons
         if self.has_dual_pistols:
             self.weapons.append({
-                "name": "Dual Pistols",
-                "ammo": 60,
-                "max_ammo": 60,
-                "reloads": 5,
-                "fire_rate": 4,  # Fast firing
-                "damage": 12,
-                "bullet_speed": 20,
-                "color": (255, 215, 0),  # Gold
-                "gun_length": 8,
-                "gun_width": 4,
+                "name": "Dual Desert Eagles",
+                "ammo": 14,  # 7 per gun
+                "max_ammo": 14,
+                "reloads": 6,
+                "fire_rate": 6,
+                "damage": 35,  # .50 AE is powerful
+                "bullet_speed": 22,
+                "color": (255, 215, 0),
+                "gun_length": 12,
+                "gun_width": 5,
                 "melee": False,
                 "grenade": False,
-                "dual_pistols": True
+                "dual_pistols": True,
+                "recoil": 4,
+                "reload_time": 80,
+                "caliber": ".50 AE"
             })
 
-        # If Throwing Knives was unlocked, add it to weapons
+        # Kunai Throwing Knives - Balanced tactical throwing blades
         if self.has_throwing_knives:
             self.weapons.append({
-                "name": "Throwing Knives",
-                "ammo": 20,
-                "max_ammo": 20,
-                "reloads": 6,
-                "fire_rate": 12,
-                "damage": 40,
-                "bullet_speed": 22,
-                "color": (192, 192, 192),  # Silver
-                "gun_length": 8,
+                "name": "Kunai Blades",
+                "ammo": 16,
+                "max_ammo": 16,
+                "reloads": 8,
+                "fire_rate": 10,
+                "damage": 50,  # Silent but deadly
+                "bullet_speed": 26,
+                "color": (200, 200, 210),
+                "gun_length": 10,
                 "gun_width": 3,
                 "melee": False,
                 "grenade": False,
-                "throwing_knife": True
+                "throwing_knife": True,
+                "recoil": 0,  # Silent, no recoil
+                "reload_time": 40,
+                "caliber": "Blade"
             })
 
     @property
@@ -2292,6 +2343,10 @@ class Player:
                 "angle": self.angle
             }
 
+        # Apply weapon-specific recoil
+        weapon_recoil = self.weapon.get("recoil", 2)
+        self.apply_recoil(weapon_recoil)
+
         is_shotgun = self.weapon.get("shotgun", False)
         weapon_name = self.weapon["name"]
         bullet = Bullet(
@@ -2306,6 +2361,7 @@ class Player:
         bullet.base_damage = self.weapon["damage"]
         bullet.damage = self.weapon["damage"]
         bullet.color = self.weapon["color"]
+        bullet.caliber = self.weapon.get("caliber", "")  # Store caliber for visuals
         return bullet
 
     def take_damage(self, damage):
@@ -2329,6 +2385,8 @@ class Player:
             reloads = self.weapon.get("reloads", 0)
             if reloads > 0 and self.ammo < self.max_ammo:
                 self.reloading = True
+                # Use weapon-specific reload time or default
+                self.reload_duration = self.weapon.get("reload_time", 60)
                 self.reload_timer = self.reload_duration
                 self.reload_phase = 0
                 return True
@@ -2799,12 +2857,24 @@ class Player2(Player):
         self.has_shotgun = False
         self.has_sniper = False
         self.medkit_charges = 0
-        # Remove extra weapons for fairness
+        # Remove extra weapons for fairness - use realistic base weapons
         self.weapons = [
-            {"name": "Rifle", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 10, "damage": 25, "bullet_speed": 15, "color": YELLOW, "gun_length": 12, "gun_width": 6, "melee": False, "grenade": False},
-            {"name": "Handgun", "ammo": 40, "max_ammo": 40, "reloads": 4, "fire_rate": 5, "damage": 10, "bullet_speed": 18, "color": (255, 200, 100), "gun_length": 8, "gun_width": 4, "melee": False, "grenade": False},
-            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20, "damage": 30, "bullet_speed": 0, "color": WHITE, "gun_length": 10, "gun_width": 3, "melee": True, "grenade": False},
-            {"name": "Grenade", "ammo": 10, "max_ammo": 10, "reloads": 0, "fire_rate": 45, "damage": 100, "bullet_speed": 0, "color": (100, 80, 60), "gun_length": 6, "gun_width": 6, "melee": False, "grenade": True, "no_reload": True}
+            # M4A1 Carbine
+            {"name": "M4A1", "ammo": 30, "max_ammo": 30, "reloads": 5, "fire_rate": 6, "damage": 28,
+             "bullet_speed": 22, "color": (255, 220, 100), "gun_length": 24, "gun_width": 5,
+             "melee": False, "grenade": False, "recoil": 3, "reload_time": 90, "caliber": "5.56mm"},
+            # Glock 17
+            {"name": "Glock 17", "ammo": 17, "max_ammo": 17, "reloads": 6, "fire_rate": 8, "damage": 18,
+             "bullet_speed": 20, "color": (255, 200, 100), "gun_length": 10, "gun_width": 4,
+             "melee": False, "grenade": False, "recoil": 2, "reload_time": 60, "caliber": "9mm"},
+            # Combat Knife
+            {"name": "Combat Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20,
+             "damage": 45, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
+             "melee": True, "grenade": False, "recoil": 0},
+            # M67 Frag Grenade
+            {"name": "M67 Frag", "ammo": 4, "max_ammo": 4, "reloads": 0, "fire_rate": 50, "damage": 150,
+             "bullet_speed": 0, "color": (80, 100, 80), "gun_length": 6, "gun_width": 6,
+             "melee": False, "grenade": True, "no_reload": True, "recoil": 0}
         ]
 
     def update(self, keys, target_pos, camera, obstacles):
@@ -5408,25 +5478,25 @@ class Game:
         # Left column items
         item_y = start_y
 
-        # Item 1: Shotgun
+        # Item 1: Remington 870 Shotgun
         if not self.player.has_shotgun:
             color = WHITE if self.player.coins >= 10 else GRAY
-            text = self.small_font.render("[1] Shotgun - 10c", True, color)
-            desc = self.small_font.render("Spread shot | 30 Ammo", True, ORANGE)
+            text = self.small_font.render("[1] Remington 870 - 10c", True, color)
+            desc = self.small_font.render("12ga Pump | 8 shells | High recoil", True, ORANGE)
         else:
-            text = self.small_font.render("[1] Shotgun - OWNED", True, GREEN)
+            text = self.small_font.render("[1] Remington 870 - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
 
-        # Item 2: RPG
+        # Item 2: RPG-7
         item_y += item_height
         if not self.player.has_rpg:
             color = WHITE if self.player.coins >= 50 else GRAY
-            text = self.small_font.render("[2] RPG - 50c", True, color)
-            desc = self.small_font.render("Explosive | 1 Ammo, 10 Reloads", True, RED)
+            text = self.small_font.render("[2] RPG-7 - 50c", True, color)
+            desc = self.small_font.render("40mm Explosive | 200 Dmg | 8 rockets", True, RED)
         else:
-            text = self.small_font.render("[2] RPG - OWNED", True, GREEN)
+            text = self.small_font.render("[2] RPG-7 - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
@@ -5434,47 +5504,47 @@ class Game:
         # Item 3: Medkit
         item_y += item_height
         if self.player.medkit_charges > 0:
-            text = self.small_font.render(f"[3] Medkit - {self.player.medkit_charges} charges", True, GREEN)
-            desc = self.small_font.render("Press H to heal", True, GREEN)
+            text = self.small_font.render(f"[3] First Aid Kit - {self.player.medkit_charges} uses", True, GREEN)
+            desc = self.small_font.render("Press H to heal to full", True, GREEN)
         else:
             color = WHITE if self.player.coins >= 90 else GRAY
-            text = self.small_font.render("[3] Medkit - 90c", True, color)
-            desc = self.small_font.render("3 heals | Press H", True, (0, 200, 0))
+            text = self.small_font.render("[3] First Aid Kit - 90c", True, color)
+            desc = self.small_font.render("3 uses | Full heal | Press H", True, (0, 200, 0))
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
 
-        # Item 4: Sniper
+        # Item 4: Barrett M82 Sniper
         item_y += item_height
         if not self.player.has_sniper:
             color = WHITE if self.player.coins >= 150 else GRAY
-            text = self.small_font.render("[4] Sniper - 150c", True, color)
-            desc = self.small_font.render("150 Dmg | Headshot bonus", True, (0, 255, 255))
+            text = self.small_font.render("[4] Barrett M82 - 150c", True, color)
+            desc = self.small_font.render(".50 BMG | 180 Dmg | Headshot bonus", True, (0, 255, 255))
         else:
-            text = self.small_font.render("[4] Sniper - OWNED", True, GREEN)
+            text = self.small_font.render("[4] Barrett M82 - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
 
-        # Item 5: Dual Pistols
+        # Item 5: Dual Desert Eagles
         item_y += item_height
         if not self.player.has_dual_pistols:
             color = WHITE if self.player.coins >= 60 else GRAY
-            text = self.small_font.render("[5] Dual Pistols - 60c", True, color)
-            desc = self.small_font.render("Fast fire | 60 Ammo", True, (255, 215, 0))
+            text = self.small_font.render("[5] Dual Desert Eagles - 60c", True, color)
+            desc = self.small_font.render(".50 AE | 35 Dmg x2 | 14 rounds", True, (255, 215, 0))
         else:
-            text = self.small_font.render("[5] Dual Pistols - OWNED", True, GREEN)
+            text = self.small_font.render("[5] Dual Desert Eagles - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
 
-        # Item 6: Throwing Knives
+        # Item 6: Kunai Blades
         item_y += item_height
         if not self.player.has_throwing_knives:
             color = WHITE if self.player.coins >= 70 else GRAY
-            text = self.small_font.render("[6] Throwing Knives - 70c", True, color)
-            desc = self.small_font.render("40 Dmg | Silent kill", True, (192, 192, 192))
+            text = self.small_font.render("[6] Kunai Blades - 70c", True, color)
+            desc = self.small_font.render("50 Dmg | Silent | 16 blades", True, (192, 192, 192))
         else:
-            text = self.small_font.render("[6] Throwing Knives - OWNED", True, GREEN)
+            text = self.small_font.render("[6] Kunai Blades - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col1_x, item_y))
         self.screen.blit(desc, (col1_x, item_y + 20))
@@ -5482,73 +5552,73 @@ class Game:
         # Right column items
         item_y = start_y
 
-        # Item 7: Flamethrower
+        # Item 7: M2 Flamethrower
         if not self.player.has_flamethrower:
             color = WHITE if self.player.coins >= 80 else GRAY
-            text = self.small_font.render("[7] Flamethrower - 80c", True, color)
-            desc = self.small_font.render("Continuous fire | 100 Fuel", True, (255, 100, 0))
+            text = self.small_font.render("[7] M2 Flamethrower - 80c", True, color)
+            desc = self.small_font.render("Napalm | Continuous fire | 100 fuel", True, (255, 100, 0))
         else:
-            text = self.small_font.render("[7] Flamethrower - OWNED", True, GREEN)
+            text = self.small_font.render("[7] M2 Flamethrower - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
-        # Item 8: Crossbow
+        # Item 8: Compound Crossbow
         item_y += item_height
         if not self.player.has_crossbow:
             color = WHITE if self.player.coins >= 100 else GRAY
-            text = self.small_font.render("[8] Crossbow - 100c", True, color)
-            desc = self.small_font.render("80 Dmg | Slow but powerful", True, (139, 69, 19))
+            text = self.small_font.render("[8] Compound Crossbow - 100c", True, color)
+            desc = self.small_font.render("90 Dmg | Slow | 12 bolts", True, (139, 69, 19))
         else:
-            text = self.small_font.render("[8] Crossbow - OWNED", True, GREEN)
+            text = self.small_font.render("[8] Compound Crossbow - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
-        # Item 9: Freeze Ray
+        # Item 9: Cryo Blaster
         item_y += item_height
         if not self.player.has_freeze:
             color = WHITE if self.player.coins >= 110 else GRAY
-            text = self.small_font.render("[9] Freeze Ray - 110c", True, color)
-            desc = self.small_font.render("Slows enemies | 40 Ammo", True, (150, 220, 255))
+            text = self.small_font.render("[9] Cryo Blaster - 110c", True, color)
+            desc = self.small_font.render("Cryogenic | Slows enemies | 40 shots", True, (150, 220, 255))
         else:
-            text = self.small_font.render("[9] Freeze Ray - OWNED", True, GREEN)
+            text = self.small_font.render("[9] Cryo Blaster - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
-        # Item 0: Laser Gun
+        # Item 0: XM-25 Laser
         item_y += item_height
         if not self.player.has_laser:
             color = WHITE if self.player.coins >= 120 else GRAY
-            text = self.small_font.render("[0] Laser Gun - 120c", True, color)
-            desc = self.small_font.render("Super fast bullet | 50 Ammo", True, (0, 255, 0))
+            text = self.small_font.render("[0] XM-25 Laser - 120c", True, color)
+            desc = self.small_font.render("Photon beam | Instant hit | 50 charge", True, (0, 255, 0))
         else:
-            text = self.small_font.render("[0] Laser Gun - OWNED", True, GREEN)
+            text = self.small_font.render("[0] XM-25 Laser - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
-        # Item -: Electric Gun
+        # Item E: Tesla Arc Gun
         item_y += item_height
         if not self.player.has_electric:
             color = WHITE if self.player.coins >= 140 else GRAY
-            text = self.small_font.render("[E] Electric Gun - 140c", True, color)
-            desc = self.small_font.render("Chain lightning | 30 Ammo", True, (100, 150, 255))
+            text = self.small_font.render("[E] Tesla Arc Gun - 140c", True, color)
+            desc = self.small_font.render("Chain lightning | 30 Dmg | 30 arcs", True, (100, 150, 255))
         else:
-            text = self.small_font.render("[E] Electric Gun - OWNED", True, GREEN)
+            text = self.small_font.render("[E] Tesla Arc Gun - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
-        # Item M: Minigun
+        # Item M: M134 Minigun
         item_y += item_height
         if not self.player.has_minigun:
             color = WHITE if self.player.coins >= 200 else GRAY
-            text = self.small_font.render("[M] Minigun - 200c", True, color)
-            desc = self.small_font.render("200 Ammo | Very fast fire", True, (180, 180, 180))
+            text = self.small_font.render("[M] M134 Minigun - 200c", True, color)
+            desc = self.small_font.render("7.62mm | 3000 RPM | 200 rounds", True, (180, 180, 180))
         else:
-            text = self.small_font.render("[M] Minigun - OWNED", True, GREEN)
+            text = self.small_font.render("[M] M134 Minigun - OWNED", True, GREEN)
             desc = self.small_font.render("Unlocked!", True, GREEN)
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
