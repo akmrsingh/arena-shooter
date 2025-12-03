@@ -332,7 +332,7 @@ SCREEN_HEIGHT = 720
 MAP_WIDTH = 5000
 MAP_HEIGHT = 5000
 
-# Mobile detection - check for touch devices
+# Mobile detection - check for actual mobile devices (not just touch-capable desktops)
 IS_MOBILE = False
 IS_TOUCH_DEVICE = False
 try:
@@ -340,9 +340,11 @@ try:
     # Check user agent for mobile devices
     user_agent = window.navigator.userAgent.lower()
     IS_TOUCH_DEVICE = hasattr(window, 'ontouchstart') or window.navigator.maxTouchPoints > 0
+    # Only enable mobile controls for actual mobile user agents (phones/tablets)
+    # This prevents desktop touch screens from getting mobile UI
     is_mobile_ua = any(x in user_agent for x in ['android', 'iphone', 'ipad', 'ipod', 'mobile', 'tablet'])
-    # Enable mobile controls for touch devices OR mobile user agents
-    IS_MOBILE = IS_TOUCH_DEVICE or is_mobile_ua
+    # Only auto-enable on actual mobile devices with touch
+    IS_MOBILE = is_mobile_ua and IS_TOUCH_DEVICE
 except:
     pass
 
@@ -2980,6 +2982,9 @@ class Game:
         self.username_field_rect = None
         self.passcode_field_rect = None
 
+        # Menu touch button rects (initialized in draw_menu)
+        self.menu_buttons = {}  # Dictionary of button_name: pygame.Rect
+
         # Web version: disable music (too slow to generate in browser)
         self.boss_music = None
         self.menu_music = None
@@ -3460,11 +3465,13 @@ class Game:
                 # Check if tapping on username field
                 if self.username_field_rect and self.username_field_rect.collidepoint(x, y):
                     self.active_input = "username"
+                    pygame.key.start_text_input()  # Show mobile keyboard
                     return
 
                 # Check if tapping on passcode field
                 if self.passcode_field_rect and self.passcode_field_rect.collidepoint(x, y):
                     self.active_input = "passcode"
+                    pygame.key.start_text_input()  # Show mobile keyboard
                     return
 
                 # Check submit button
@@ -3495,6 +3502,80 @@ class Game:
                     pygame.key.stop_text_input()
                     self.state = "menu"
                     return
+            return
+
+        # Handle menu touch events
+        if self.state == "menu":
+            if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+                if event.type == pygame.FINGERDOWN:
+                    x = event.x * SCREEN_WIDTH
+                    y = event.y * SCREEN_HEIGHT
+                else:
+                    x, y = event.pos
+
+                # Check menu buttons
+                for btn_name, btn_rect in self.menu_buttons.items():
+                    if btn_rect and btn_rect.collidepoint(x, y):
+                        # Solo modes
+                        if btn_name == "easy":
+                            self.game_mode = "solo"
+                            self.start_game("easy")
+                        elif btn_name == "medium":
+                            self.game_mode = "solo"
+                            self.start_game("medium")
+                        elif btn_name == "hard":
+                            self.game_mode = "solo"
+                            self.start_game("hard")
+                        elif btn_name == "impossible":
+                            self.game_mode = "solo"
+                            self.start_game("impossible")
+                        # Online modes
+                        elif btn_name == "online_coop":
+                            self.online_game_mode = "coop"
+                            self.state = "online_menu"
+                            self.online_input_code = ""
+                            self.online_message = ""
+                        elif btn_name == "online_pvp":
+                            self.online_game_mode = "pvp"
+                            self.state = "online_menu"
+                            self.online_input_code = ""
+                            self.online_message = ""
+                        # Local multiplayer
+                        elif btn_name == "local_pvp":
+                            self.game_mode = "pvp"
+                            self.start_game("pvp")
+                        elif btn_name == "coop_easy":
+                            self.game_mode = "coop"
+                            self.start_game("easy")
+                        elif btn_name == "coop_med":
+                            self.game_mode = "coop"
+                            self.start_game("medium")
+                        elif btn_name == "coop_hard":
+                            self.game_mode = "coop"
+                            self.start_game("hard")
+                        elif btn_name == "coop_imp":
+                            self.game_mode = "coop"
+                            self.start_game("impossible")
+                        # Map selection
+                        elif btn_name == "map_left":
+                            self.map_index = (self.map_index - 1) % len(self.map_names)
+                            self.selected_map = self.map_names[self.map_index]
+                        elif btn_name == "map_right":
+                            self.map_index = (self.map_index + 1) % len(self.map_names)
+                            self.selected_map = self.map_names[self.map_index]
+                        # Login/logout
+                        elif btn_name == "login":
+                            if current_user:
+                                logout_user()
+                            else:
+                                self.state = "login"
+                                self.username_input = ""
+                                self.passcode_input = ""
+                                self.login_message = ""
+                        # Touch toggle
+                        elif btn_name == "touch_toggle":
+                            self.mobile_controls = not self.mobile_controls
+                        return
             return
 
         if not self.mobile_controls or self.state != "playing":
@@ -4989,70 +5070,117 @@ class Game:
         self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
         self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 150))
 
+        # Helper function to draw a menu button
+        def draw_menu_button(text, y, color, bg_color, btn_name):
+            btn_width = 280
+            btn_height = 26
+            btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+            # Draw button background
+            pygame.draw.rect(self.screen, bg_color, (btn_x, y, btn_width, btn_height))
+            pygame.draw.rect(self.screen, color, (btn_x, y, btn_width, btn_height), 2)
+            # Draw text
+            text_render = self.small_font.render(text, True, color)
+            self.screen.blit(text_render, (SCREEN_WIDTH // 2 - text_render.get_width() // 2, y + 3))
+            # Store button rect
+            self.menu_buttons[btn_name] = pygame.Rect(btn_x, y, btn_width, btn_height)
+
         # Solo mode section
         solo_header = self.font.render("-- SOLO MODE --", True, LIGHT_BLUE)
         self.screen.blit(solo_header, (SCREEN_WIDTH // 2 - solo_header.get_width() // 2, 200))
 
-        # Difficulty options
-        easy = self.small_font.render("[1] EASY - 8 Robots", True, GREEN)
-        medium = self.small_font.render("[2] MEDIUM - 15 Robots", True, YELLOW)
-        hard = self.small_font.render("[3] HARD - 25 Robots", True, RED)
-        impossible = self.small_font.render("[4] IMPOSSIBLE - 5 Waves + BOSS", True, (150, 0, 150))
+        # Difficulty buttons
+        draw_menu_button("EASY - 8 Robots", 230, GREEN, (20, 60, 20), "easy")
+        draw_menu_button("MEDIUM - 15 Robots", 258, YELLOW, (60, 60, 20), "medium")
+        draw_menu_button("HARD - 25 Robots", 286, RED, (60, 20, 20), "hard")
+        draw_menu_button("IMPOSSIBLE - 5 Waves + BOSS", 314, (150, 0, 150), (40, 0, 40), "impossible")
 
-        self.screen.blit(easy, (SCREEN_WIDTH // 2 - easy.get_width() // 2, 240))
-        self.screen.blit(medium, (SCREEN_WIDTH // 2 - medium.get_width() // 2, 270))
-        self.screen.blit(hard, (SCREEN_WIDTH // 2 - hard.get_width() // 2, 300))
-        self.screen.blit(impossible, (SCREEN_WIDTH // 2 - impossible.get_width() // 2, 330))
-
-        # Multiplayer section
-        multi_header = self.font.render("-- 2 PLAYER (SAME DEVICE) --", True, ORANGE)
-        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 365))
-
-        pvp = self.small_font.render("[5] PvP - 1v1 Battle", True, (255, 100, 100))
-        coop_easy = self.small_font.render("[6] CO-OP Easy", True, GREEN)
-        coop_med = self.small_font.render("[7] CO-OP Medium", True, YELLOW)
-        coop_hard = self.small_font.render("[8] CO-OP Hard", True, ORANGE)
-        coop_imp = self.small_font.render("[9] CO-OP Impossible", True, RED)
-
-        self.screen.blit(pvp, (SCREEN_WIDTH // 2 - pvp.get_width() // 2, 390))
-        self.screen.blit(coop_easy, (SCREEN_WIDTH // 2 - coop_easy.get_width() // 2, 412))
-        self.screen.blit(coop_med, (SCREEN_WIDTH // 2 - coop_med.get_width() // 2, 434))
-        self.screen.blit(coop_hard, (SCREEN_WIDTH // 2 - coop_hard.get_width() // 2, 456))
-        self.screen.blit(coop_imp, (SCREEN_WIDTH // 2 - coop_imp.get_width() // 2, 478))
-
-        # Online Multiplayer section
+        # Online Multiplayer section (moved up for mobile - most used)
         online_header = self.font.render("-- ONLINE MULTIPLAYER --", True, (0, 200, 255))
-        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 510))
+        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 350))
 
-        online_coop = self.small_font.render("[0] ONLINE CO-OP - Team up vs robots", True, (0, 255, 200))
-        online_pvp = self.small_font.render("[P] ONLINE PVP - Fight each other", True, (255, 100, 150))
-        self.screen.blit(online_coop, (SCREEN_WIDTH // 2 - online_coop.get_width() // 2, 535))
-        self.screen.blit(online_pvp, (SCREEN_WIDTH // 2 - online_pvp.get_width() // 2, 557))
+        draw_menu_button("ONLINE CO-OP - Team up vs robots", 380, (0, 255, 200), (0, 40, 30), "online_coop")
+        draw_menu_button("ONLINE PVP - Fight each other", 408, (255, 100, 150), (40, 15, 25), "online_pvp")
 
-        # Map selection section
-        map_header = self.small_font.render("-- MAP: [<] [>] --", True, GRAY)
-        self.screen.blit(map_header, (SCREEN_WIDTH // 2 - map_header.get_width() // 2, 590))
+        # Map selection with touch buttons
+        map_y = 445
+        map_btn_width = 50
+        left_btn_x = SCREEN_WIDTH // 2 - 140
+        right_btn_x = SCREEN_WIDTH // 2 + 90
 
-        # Display current map with arrows
-        map_display = self.font.render(f"< {self.selected_map.upper()} >", True, (100, 200, 255))
-        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, 610))
+        # Left arrow button
+        pygame.draw.rect(self.screen, (50, 50, 70), (left_btn_x, map_y, map_btn_width, 30))
+        pygame.draw.rect(self.screen, (100, 200, 255), (left_btn_x, map_y, map_btn_width, 30), 2)
+        left_text = self.font.render("<", True, (100, 200, 255))
+        self.screen.blit(left_text, (left_btn_x + map_btn_width // 2 - left_text.get_width() // 2, map_y + 2))
+        self.menu_buttons["map_left"] = pygame.Rect(left_btn_x, map_y, map_btn_width, 30)
 
-        # Show logged in user or guest status
+        # Map name
+        map_display = self.font.render(self.selected_map.upper(), True, (100, 200, 255))
+        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, map_y + 2))
+
+        # Right arrow button
+        pygame.draw.rect(self.screen, (50, 50, 70), (right_btn_x, map_y, map_btn_width, 30))
+        pygame.draw.rect(self.screen, (100, 200, 255), (right_btn_x, map_y, map_btn_width, 30), 2)
+        right_text = self.font.render(">", True, (100, 200, 255))
+        self.screen.blit(right_text, (right_btn_x + map_btn_width // 2 - right_text.get_width() // 2, map_y + 2))
+        self.menu_buttons["map_right"] = pygame.Rect(right_btn_x, map_y, map_btn_width, 30)
+
+        # Local multiplayer section (smaller for mobile)
+        multi_header = self.small_font.render("-- LOCAL 2P (same device) --", True, ORANGE)
+        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 490))
+
+        # Two columns for local modes
+        col1_x = SCREEN_WIDTH // 2 - 145
+        col2_x = SCREEN_WIDTH // 2 + 5
+        btn_w = 140
+        btn_h = 24
+
+        local_modes = [
+            ("PvP 1v1", 515, col1_x, (255, 100, 100), (60, 20, 20), "local_pvp"),
+            ("CO-OP Easy", 515, col2_x, GREEN, (20, 60, 20), "coop_easy"),
+            ("CO-OP Med", 541, col1_x, YELLOW, (60, 60, 20), "coop_med"),
+            ("CO-OP Hard", 541, col2_x, ORANGE, (60, 40, 0), "coop_hard"),
+            ("CO-OP Imp", 567, col1_x, RED, (60, 20, 20), "coop_imp"),
+        ]
+        for text, y, x, color, bg, name in local_modes:
+            pygame.draw.rect(self.screen, bg, (x, y, btn_w, btn_h))
+            pygame.draw.rect(self.screen, color, (x, y, btn_w, btn_h), 2)
+            txt = self.small_font.render(text, True, color)
+            self.screen.blit(txt, (x + btn_w // 2 - txt.get_width() // 2, y + 2))
+            self.menu_buttons[name] = pygame.Rect(x, y, btn_w, btn_h)
+
+        # Login button
+        login_y = 610
+        login_btn_width = 200
+        login_btn_x = SCREEN_WIDTH // 2 - login_btn_width // 2
         if current_user:
-            user_info = self.small_font.render(f"Playing as: {current_user} | [L] Logout", True, GREEN)
+            pygame.draw.rect(self.screen, (40, 60, 40), (login_btn_x, login_y, login_btn_width, 28))
+            pygame.draw.rect(self.screen, GREEN, (login_btn_x, login_y, login_btn_width, 28), 2)
+            login_text = self.small_font.render(f"{current_user} (Logout)", True, GREEN)
         else:
-            user_info = self.small_font.render("Playing as: Guest | [L] Login", True, GRAY)
-        self.screen.blit(user_info, (SCREEN_WIDTH // 2 - user_info.get_width() // 2, 655))
+            pygame.draw.rect(self.screen, (40, 40, 50), (login_btn_x, login_y, login_btn_width, 28))
+            pygame.draw.rect(self.screen, GRAY, (login_btn_x, login_y, login_btn_width, 28), 2)
+            login_text = self.small_font.render("Guest (Login)", True, GRAY)
+        self.screen.blit(login_text, (SCREEN_WIDTH // 2 - login_text.get_width() // 2, login_y + 4))
+        self.menu_buttons["login"] = pygame.Rect(login_btn_x, login_y, login_btn_width, 28)
 
-        # Controls hint
-        controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
-        self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 680))
-
-        # Touch controls hint
+        # Touch controls toggle button
+        touch_y = 650
+        touch_btn_width = 180
+        touch_btn_x = SCREEN_WIDTH // 2 - touch_btn_width // 2
         touch_status = "ON" if self.mobile_controls else "OFF"
         touch_color = GREEN if self.mobile_controls else GRAY
-        touch_hint = self.small_font.render(f"[T] Touch Controls: {touch_status}", True, touch_color)
-        self.screen.blit(touch_hint, (SCREEN_WIDTH // 2 - touch_hint.get_width() // 2, 700))
+        touch_bg = (20, 60, 20) if self.mobile_controls else (40, 40, 40)
+        pygame.draw.rect(self.screen, touch_bg, (touch_btn_x, touch_y, touch_btn_width, 28))
+        pygame.draw.rect(self.screen, touch_color, (touch_btn_x, touch_y, touch_btn_width, 28), 2)
+        touch_text = self.small_font.render(f"Touch Controls: {touch_status}", True, touch_color)
+        self.screen.blit(touch_text, (SCREEN_WIDTH // 2 - touch_text.get_width() // 2, touch_y + 4))
+        self.menu_buttons["touch_toggle"] = pygame.Rect(touch_btn_x, touch_y, touch_btn_width, 28)
+
+        # Controls hint (only on desktop)
+        if not IS_MOBILE:
+            controls_hint = self.small_font.render("P1: WASD+Mouse | P2: IJKL+NumPad", True, GRAY)
+            self.screen.blit(controls_hint, (SCREEN_WIDTH // 2 - controls_hint.get_width() // 2, 690))
 
     def draw_gameover(self):
         # Darken screen
