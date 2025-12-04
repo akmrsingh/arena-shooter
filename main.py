@@ -2648,6 +2648,21 @@ class Player:
         sight_y = barrel_end_y - math.sin(angle) * 3
         pygame.draw.circle(screen, (30, 30, 30), (int(sight_x), int(sight_y)), 2)
 
+        # Muzzle flash when firing
+        if self.is_firing:
+            flash_x = barrel_end_x + math.cos(angle) * 5
+            flash_y = barrel_end_y + math.sin(angle) * 5
+            flash_size = 6 + math.sin(self.anim_timer * 0.8) * 2
+            pygame.draw.circle(screen, (255, 200, 100), (int(flash_x), int(flash_y)), int(flash_size))
+            pygame.draw.circle(screen, (255, 255, 200), (int(flash_x), int(flash_y)), int(flash_size * 0.5))
+            # Shell ejection
+            if self.fire_cooldown > 3:
+                eject_angle = angle + math.pi/2 + 0.3
+                eject_dist = 8 + (6 - self.fire_cooldown) * 2
+                shell_x = gun_start_x + math.cos(angle) * 10 + math.cos(eject_angle) * eject_dist
+                shell_y = gun_start_y + math.sin(angle) * 10 + math.sin(eject_angle) * eject_dist
+                pygame.draw.ellipse(screen, (200, 180, 100), (int(shell_x)-2, int(shell_y)-1, 4, 2))
+
     def draw_handgun(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
         """Draw realistic pistol"""
         angle = self.angle + reload_tilt
@@ -2692,8 +2707,22 @@ class Player:
         # Trigger guard
         pygame.draw.circle(screen, (50, 50, 50), (int(grip_x), int(grip_y)), 3, 1)
 
+        # Muzzle flash and slide animation when firing
+        if self.is_firing:
+            flash_x = slide_end_x + math.cos(angle) * 4
+            flash_y = slide_end_y + math.sin(angle) * 4
+            flash_size = 5 + math.sin(self.anim_timer * 0.9) * 1.5
+            pygame.draw.circle(screen, (255, 220, 100), (int(flash_x), int(flash_y)), int(flash_size))
+            # Shell eject
+            if self.fire_cooldown > 4:
+                eject_angle = angle - math.pi/2 - 0.2
+                eject_dist = 6 + (8 - self.fire_cooldown) * 1.5
+                shell_x = gun_start_x + math.cos(angle) * 6 + math.cos(eject_angle) * eject_dist
+                shell_y = gun_start_y + math.sin(angle) * 6 + math.sin(eject_angle) * eject_dist
+                pygame.draw.ellipse(screen, (200, 180, 100), (int(shell_x)-2, int(shell_y)-1, 4, 2))
+
     def draw_knife(self, screen, sx, sy):
-        """Draw combat knife"""
+        """Draw combat knife with gleam animation"""
         angle = self.angle
         # Start knife from edge of player body
         knife_start_x = sx + math.cos(angle) * self.radius
@@ -2705,15 +2734,21 @@ class Player:
         blade_end_x = knife_start_x + math.cos(angle) * blade_length
         blade_end_y = knife_start_y + math.sin(angle) * blade_length
 
-        # Blade shape (tapered)
-        pygame.draw.line(screen, (180, 180, 190),
+        # Blade shape (tapered) with animated sheen
+        sheen = int(15 * math.sin(self.anim_timer * 0.15))
+        pygame.draw.line(screen, (180 + sheen, 180 + sheen, 190 + sheen),
                         (knife_start_x, knife_start_y),
                         (blade_end_x, blade_end_y), 4)
 
-        # Blade edge highlight
+        # Blade edge highlight with moving gleam
+        gleam_pos = (self.anim_timer * 0.08) % 1.0  # 0 to 1 along blade
+        gleam_x = knife_start_x + math.cos(angle) * (2 + gleam_pos * (blade_length - 4))
+        gleam_y = knife_start_y + math.sin(angle) * (2 + gleam_pos * (blade_length - 4))
         pygame.draw.line(screen, (220, 220, 230),
                         (knife_start_x + math.cos(angle) * 2, knife_start_y + math.sin(angle) * 2),
                         (blade_end_x, blade_end_y), 2)
+        # Gleam sparkle
+        pygame.draw.circle(screen, (255, 255, 255), (int(gleam_x), int(gleam_y)), 2)
 
         # Guard at the start
         guard_angle = angle + math.pi/2
@@ -2723,24 +2758,43 @@ class Player:
         guard_y2 = knife_start_y + math.sin(guard_angle + math.pi) * 5
         pygame.draw.line(screen, (60, 60, 60), (guard_x1, guard_y1), (guard_x2, guard_y2), 3)
 
+        # Slash effect when attacking
+        if self.is_firing:
+            slash_angle = angle + math.sin(self.anim_timer * 1.2) * 0.5
+            slash_x = blade_end_x + math.cos(slash_angle) * 8
+            slash_y = blade_end_y + math.sin(slash_angle) * 8
+            pygame.draw.line(screen, (255, 255, 255), (int(blade_end_x), int(blade_end_y)), (int(slash_x), int(slash_y)), 2)
+
     def draw_grenade_weapon(self, screen, sx, sy):
-        """Draw grenade in hand"""
+        """Draw grenade in hand with ready-to-throw animation"""
         angle = self.angle
-        # Hand position - outside player body
-        hand_x = sx + math.cos(angle) * (self.radius + 8)
-        hand_y = sy + math.sin(angle) * (self.radius + 8)
+        # Hand position - outside player body with slight bob
+        bob = math.sin(self.anim_timer * 0.12) * 2
+        hand_x = sx + math.cos(angle) * (self.radius + 8 + bob)
+        hand_y = sy + math.sin(angle) * (self.radius + 8 + bob)
 
-        # Grenade body
-        pygame.draw.circle(screen, (60, 80, 60), (int(hand_x), int(hand_y)), 7)
-        pygame.draw.circle(screen, (80, 100, 80), (int(hand_x), int(hand_y)), 7, 2)
+        # Grenade body with pulsing danger glow
+        glow = int(20 * abs(math.sin(self.anim_timer * 0.2)))
+        pygame.draw.circle(screen, (60 + glow//3, 80, 60), (int(hand_x), int(hand_y)), 7)
+        pygame.draw.circle(screen, (80 + glow//2, 100, 80), (int(hand_x), int(hand_y)), 7, 2)
 
-        # Spoon/lever
-        spoon_end_x = hand_x + math.cos(angle - 0.5) * 10
-        spoon_end_y = hand_y + math.sin(angle - 0.5) * 10
+        # Spoon/lever - slight wobble
+        spoon_wobble = math.sin(self.anim_timer * 0.15) * 0.1
+        spoon_end_x = hand_x + math.cos(angle - 0.5 + spoon_wobble) * 10
+        spoon_end_y = hand_y + math.sin(angle - 0.5 + spoon_wobble) * 10
         pygame.draw.line(screen, (100, 100, 100), (hand_x, hand_y), (spoon_end_x, spoon_end_y), 2)
 
-        # Pin ring
-        pygame.draw.circle(screen, (150, 140, 50), (int(hand_x + 3), int(hand_y - 3)), 3, 1)
+        # Pin ring with shine
+        ring_shine = int(30 * abs(math.sin(self.anim_timer * 0.25)))
+        pygame.draw.circle(screen, (150 + ring_shine, 140 + ring_shine, 50), (int(hand_x + 3), int(hand_y - 3)), 3, 1)
+
+        # Fuse spark effect when throwing
+        if self.is_firing:
+            spark_x = hand_x - math.cos(angle) * 5 + math.sin(self.anim_timer * 1.5) * 3
+            spark_y = hand_y - math.sin(angle) * 5 + math.cos(self.anim_timer * 1.5) * 3
+            spark_color = (255, 200 + int(55 * math.sin(self.anim_timer)), 50)
+            pygame.draw.circle(screen, spark_color, (int(spark_x), int(spark_y)), 3)
+            pygame.draw.circle(screen, (255, 255, 200), (int(spark_x), int(spark_y)), 1)
 
     def draw_shotgun(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
         """Draw pump-action shotgun"""
@@ -2785,6 +2839,21 @@ class Player:
             shell_x = pump_x + math.cos(angle + math.pi/2) * (5 + shell_progress * 15)
             shell_y = pump_y + math.sin(angle + math.pi/2) * (5 + shell_progress * 15)
             pygame.draw.ellipse(screen, (200, 50, 50), (shell_x - 3, shell_y - 2, 8, 4))
+
+        # Massive muzzle flash for shotgun (spread pattern)
+        if self.is_firing:
+            flash_x = barrel_end_x + math.cos(angle) * 6
+            flash_y = barrel_end_y + math.sin(angle) * 6
+            # Multiple flash points for spread effect
+            for spread in [-0.25, -0.12, 0, 0.12, 0.25]:
+                spread_x = barrel_end_x + math.cos(angle + spread) * (8 + math.sin(self.anim_timer) * 2)
+                spread_y = barrel_end_y + math.sin(angle + spread) * (8 + math.sin(self.anim_timer) * 2)
+                pygame.draw.circle(screen, (255, 180, 80), (int(spread_x), int(spread_y)), 4)
+            pygame.draw.circle(screen, (255, 220, 150), (int(flash_x), int(flash_y)), 8)
+            # Smoke puff
+            smoke_x = barrel_end_x + math.cos(angle) * 12
+            smoke_y = barrel_end_y + math.sin(angle) * 12
+            pygame.draw.circle(screen, (150, 150, 150), (int(smoke_x), int(smoke_y)), 6)
 
     def draw_rpg(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
         """Draw RPG launcher"""
@@ -2831,6 +2900,27 @@ class Player:
         sight_up_y = sight_y + math.sin(angle - math.pi/2) * 6
         pygame.draw.line(screen, (60, 60, 55), (sight_x, sight_y), (sight_up_x, sight_up_y), 2)
 
+        # Rocket ignition and backblast when firing
+        if self.is_firing:
+            # Front rocket flame
+            flame_x = tube_end_x + math.cos(angle) * 8
+            flame_y = tube_end_y + math.sin(angle) * 8
+            flame_size = 10 + math.sin(self.anim_timer * 1.2) * 3
+            pygame.draw.circle(screen, (255, 150, 50), (int(flame_x), int(flame_y)), int(flame_size))
+            pygame.draw.circle(screen, (255, 220, 100), (int(flame_x), int(flame_y)), int(flame_size * 0.5))
+            # Backblast smoke behind launcher
+            for i in range(4):
+                back_dist = 10 + i * 8 + math.sin(self.anim_timer * 0.5 + i) * 3
+                back_x = gun_start_x + math.cos(angle + math.pi) * back_dist
+                back_y = gun_start_y + math.sin(angle + math.pi) * back_dist
+                smoke_size = 8 - i + math.sin(self.anim_timer * 0.4) * 2
+                smoke_alpha = 200 - i * 40
+                pygame.draw.circle(screen, (smoke_alpha, smoke_alpha, smoke_alpha), (int(back_x), int(back_y)), int(max(2, smoke_size)))
+            # Smoke trail particles
+            trail_x = flame_x + math.cos(angle) * 5
+            trail_y = flame_y + math.sin(angle) * 5
+            pygame.draw.circle(screen, (180, 180, 180), (int(trail_x), int(trail_y)), 5)
+
     def draw_sniper(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
         """Draw sniper rifle with scope"""
         angle = self.angle + reload_tilt
@@ -2861,9 +2951,15 @@ class Player:
         scope_top_x = scope_x + math.cos(scope_up_angle) * 8
         scope_top_y = scope_y + math.sin(scope_up_angle) * 8
         pygame.draw.line(screen, (20, 20, 25), (scope_x, scope_y), (scope_top_x, scope_top_y), 6)
-        # Scope lens
-        pygame.draw.circle(screen, (100, 150, 200), (int(scope_top_x), int(scope_top_y)), 4)
+        # Scope lens with animated glint
+        lens_glint = int(50 * abs(math.sin(self.anim_timer * 0.1)))
+        pygame.draw.circle(screen, (100 + lens_glint, 150 + lens_glint//2, 200 + lens_glint//3), (int(scope_top_x), int(scope_top_y)), 4)
         pygame.draw.circle(screen, (50, 80, 120), (int(scope_top_x), int(scope_top_y)), 4, 1)
+        # Scope glint sparkle (appears periodically)
+        if (self.anim_timer % 90) < 15:
+            glint_intensity = 1 - abs((self.anim_timer % 90) - 7.5) / 7.5
+            glint_size = int(3 * glint_intensity)
+            pygame.draw.circle(screen, (255, 255, 255), (int(scope_top_x), int(scope_top_y)), glint_size)
 
         # Bipod hints
         bipod_x = gun_start_x + math.cos(angle) * (barrel_length - 8)
@@ -2872,6 +2968,21 @@ class Player:
         bipod_end_x = bipod_x + math.cos(bipod_angle) * 6
         bipod_end_y = bipod_y + math.sin(bipod_angle) * 6
         pygame.draw.line(screen, (60, 60, 60), (bipod_x, bipod_y), (bipod_end_x, bipod_end_y), 2)
+
+        # Powerful muzzle flash when firing
+        if self.is_firing:
+            flash_x = barrel_end_x + math.cos(angle) * 8
+            flash_y = barrel_end_y + math.sin(angle) * 8
+            # Large bright flash
+            pygame.draw.circle(screen, (255, 240, 200), (int(flash_x), int(flash_y)), 10)
+            pygame.draw.circle(screen, (255, 255, 230), (int(flash_x), int(flash_y)), 5)
+            # Shell eject
+            if self.fire_cooldown > 3:
+                eject_angle = angle + math.pi/2 + 0.4
+                eject_dist = 10 + (5 - min(5, self.fire_cooldown)) * 3
+                shell_x = gun_start_x + math.cos(angle) * 15 + math.cos(eject_angle) * eject_dist
+                shell_y = gun_start_y + math.sin(angle) * 15 + math.sin(eject_angle) * eject_dist
+                pygame.draw.ellipse(screen, (180, 160, 80), (int(shell_x)-3, int(shell_y)-2, 6, 4))
 
     def draw_minigun(self, screen, sx, sy, recoil):
         """Draw multi-barrel minigun with spinning barrels animation"""
