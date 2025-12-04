@@ -3008,10 +3008,29 @@ class Player:
             # Vary brightness based on rotation for 3D effect
             brightness = int(40 + 20 * math.cos(barrel_angle))
             pygame.draw.line(screen, (brightness, brightness, brightness + 5), (bx, by), (bex, bey), 3)
-        # Ammo drum
-        drum_x = gun_start_x + math.cos(angle + math.pi/2) * 10
-        drum_y = gun_start_y + math.sin(angle + math.pi/2) * 10
+        # Ammo drum - animate during reload
+        drum_drop = 0
+        if self.reloading:
+            if self.reload_phase < 0.3:
+                drum_drop = self.reload_phase / 0.3 * 20  # Drum drops down
+            elif self.reload_phase < 0.7:
+                drum_drop = 20  # Drum is out
+            else:
+                drum_drop = 20 * (1 - (self.reload_phase - 0.7) / 0.3)  # New drum comes up
+        drum_x = gun_start_x + math.cos(angle + math.pi/2) * (10 + drum_drop)
+        drum_y = gun_start_y + math.sin(angle + math.pi/2) * (10 + drum_drop)
         pygame.draw.circle(screen, (80, 70, 60), (int(drum_x), int(drum_y)), 8)
+        # Ammo belt from drum to gun
+        if not self.reloading or self.reload_phase > 0.7:
+            belt_x = gun_start_x + math.cos(angle + math.pi/2) * 5
+            belt_y = gun_start_y + math.sin(angle + math.pi/2) * 5
+            pygame.draw.line(screen, (70, 60, 50), (int(drum_x), int(drum_y)), (int(belt_x), int(belt_y)), 3)
+        # Reload indicator - spinning down during reload
+        if self.reloading:
+            reload_text_x = gun_start_x - 15
+            reload_text_y = gun_start_y - 15
+            pygame.draw.arc(screen, (255, 200, 50), (int(reload_text_x), int(reload_text_y), 20, 20),
+                           0, self.reload_phase * math.pi * 2, 3)
         # Muzzle flash when firing
         if self.is_firing:
             flash_x = gun_start_x + math.cos(angle) * (barrel_length + 5)
@@ -3028,14 +3047,34 @@ class Player:
         tube_end_y = gun_start_y + math.sin(angle) * tube_length
         # Main tube
         pygame.draw.line(screen, (70, 70, 75), (gun_start_x, gun_start_y), (tube_end_x, tube_end_y), 10)
-        # Fuel tank on back
-        tank_x = gun_start_x + math.cos(angle + math.pi) * 8
-        tank_y = gun_start_y + math.sin(angle + math.pi) * 8
-        pygame.draw.circle(screen, (200, 80, 30), (int(tank_x), int(tank_y)), 8)
-        # Animated pilot flame - flickers based on timer
+        # Fuel tank on back - animate during reload (tank swap)
+        tank_drop = 0
+        if self.reloading:
+            if self.reload_phase < 0.3:
+                tank_drop = self.reload_phase / 0.3 * 15  # Tank detaches
+            elif self.reload_phase < 0.6:
+                tank_drop = 15 + 10  # Tank falls away
+            else:
+                tank_drop = 25 * (1 - (self.reload_phase - 0.6) / 0.4)  # New tank attaches
+        tank_x = gun_start_x + math.cos(angle + math.pi) * 8 + math.cos(angle + math.pi/2) * tank_drop
+        tank_y = gun_start_y + math.sin(angle + math.pi) * 8 + math.sin(angle + math.pi/2) * tank_drop
+        # Tank fill level indicator
+        tank_color = (200, 80, 30) if not self.reloading else (150, 60, 20)
+        pygame.draw.circle(screen, tank_color, (int(tank_x), int(tank_y)), 8)
+        # Fuel level indicator during reload
+        if self.reloading and self.reload_phase > 0.6:
+            fill_level = (self.reload_phase - 0.6) / 0.4
+            pygame.draw.arc(screen, (255, 150, 50), (int(tank_x)-6, int(tank_y)-6, 12, 12),
+                           -math.pi/2, -math.pi/2 + fill_level * math.pi * 2, 2)
+        # Fuel hose connecting tank to gun
+        if not self.reloading or self.reload_phase > 0.7:
+            hose_x = gun_start_x + math.cos(angle + math.pi) * 3
+            hose_y = gun_start_y + math.sin(angle + math.pi) * 3
+            pygame.draw.line(screen, (60, 60, 60), (int(tank_x), int(tank_y)), (int(hose_x), int(hose_y)), 2)
+        # Animated pilot flame - flickers based on timer (dim during reload)
         flicker = math.sin(self.anim_timer * 0.5) * 2
-        flame_size = 5 + flicker
-        # Outer flame (orange)
+        flame_size = 5 + flicker if not self.reloading else 2
+        # Outer flame (orange) - small during reload
         pygame.draw.circle(screen, (255, 120 + int(flicker * 15), 30), (int(tube_end_x), int(tube_end_y)), int(flame_size))
         # Inner flame (yellow)
         pygame.draw.circle(screen, (255, 220 + int(flicker * 10), 80), (int(tube_end_x), int(tube_end_y)), int(flame_size * 0.6))
@@ -3058,7 +3097,35 @@ class Player:
         barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
         # Body
         pygame.draw.line(screen, (40, 80, 40), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 8)
-        # Animated energy coils - pulse and travel along barrel
+        # Energy cell on back - animate during reload (cell swap)
+        cell_drop = 0
+        cell_brightness = 255
+        if self.reloading:
+            if self.reload_phase < 0.25:
+                # Cell drains (dims)
+                cell_brightness = int(255 * (1 - self.reload_phase / 0.25 * 0.8))
+            elif self.reload_phase < 0.5:
+                # Cell ejects
+                cell_drop = (self.reload_phase - 0.25) / 0.25 * 15
+                cell_brightness = 50
+            elif self.reload_phase < 0.75:
+                # No cell visible (gap)
+                cell_drop = -100  # Hide it
+            else:
+                # New cell inserts and charges up
+                cell_drop = 15 * (1 - (self.reload_phase - 0.75) / 0.25)
+                cell_brightness = int(50 + 205 * (self.reload_phase - 0.75) / 0.25)
+        cell_x = gun_start_x + math.cos(angle + math.pi) * 5 + math.cos(angle + math.pi/2) * cell_drop
+        cell_y = gun_start_y + math.sin(angle + math.pi) * 5 + math.sin(angle + math.pi/2) * cell_drop
+        if cell_drop > -50:  # Only draw if not hidden
+            pygame.draw.rect(screen, (30, min(255, cell_brightness), 50),
+                           (int(cell_x) - 4, int(cell_y) - 3, 8, 6))
+            # Energy indicator on cell
+            if cell_brightness > 100:
+                pygame.draw.rect(screen, (50, min(255, cell_brightness), 100),
+                               (int(cell_x) - 2, int(cell_y) - 1, 4, 2))
+        # Animated energy coils - pulse and travel along barrel (dim during reload)
+        coil_intensity = 1.0 if not self.reloading else max(0.2, self.reload_phase)
         for i in range(3):
             # Coils move along the barrel
             coil_offset = (self.anim_timer * 0.15 + i * 1.5) % 4.5
@@ -3067,15 +3134,22 @@ class Player:
             # Pulse size
             pulse = math.sin(self.anim_timer * 0.3 + i) * 1.5
             coil_size = 3 + pulse
-            # Brightness pulses
-            brightness = int(200 + 55 * math.sin(self.anim_timer * 0.4 + i * 0.5))
+            # Brightness pulses - dim during reload
+            brightness = int((200 + 55 * math.sin(self.anim_timer * 0.4 + i * 0.5)) * coil_intensity)
             pygame.draw.circle(screen, (50, brightness, 100), (int(cx), int(cy)), int(max(2, coil_size)))
-        # Emitter - pulses
+        # Emitter - pulses (dim during reload)
         emit_pulse = math.sin(self.anim_timer * 0.25) * 2
-        pygame.draw.circle(screen, (100, 255, 100), (int(barrel_end_x), int(barrel_end_y)), int(5 + emit_pulse))
+        emit_brightness = int(255 * coil_intensity)
+        pygame.draw.circle(screen, (int(100 * coil_intensity), emit_brightness, int(100 * coil_intensity)),
+                          (int(barrel_end_x), int(barrel_end_y)), int(5 + emit_pulse))
         # Firing beam glow
         if self.is_firing:
             pygame.draw.circle(screen, (150, 255, 150), (int(barrel_end_x), int(barrel_end_y)), 8)
+        # Reload indicator
+        if self.reloading:
+            pygame.draw.arc(screen, (100, 255, 100),
+                          (int(gun_start_x) - 12, int(gun_start_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
 
     def draw_dual_pistols(self, screen, sx, sy, recoil):
         """Draw golden dual pistols with alternating fire animation"""
@@ -3093,17 +3167,52 @@ class Player:
                 # One pistol fires then the other
                 if (self.anim_timer // 3) % 2 == i:
                     pistol_recoil = recoil
-            pex = px + math.cos(angle + offset) * (18 - pistol_recoil)
-            pey = py + math.sin(angle + offset) * (18 - pistol_recoil)
+            # Reload animation - tilt pistols down and show magazine drop
+            tilt_angle = 0
+            mag_drop = 0
+            if self.reloading:
+                # Stagger reload - reload one pistol then the other
+                pistol_phase = self.reload_phase * 2 - i * 0.5  # Staggered
+                pistol_phase = max(0, min(1, pistol_phase))
+                if pistol_phase < 0.3:
+                    # Tilt pistol down
+                    tilt_angle = pistol_phase / 0.3 * 0.4
+                elif pistol_phase < 0.5:
+                    # Magazine drops out
+                    tilt_angle = 0.4
+                    mag_drop = (pistol_phase - 0.3) / 0.2 * 20
+                elif pistol_phase < 0.7:
+                    # Magazine out (gap)
+                    tilt_angle = 0.4
+                    mag_drop = -100  # Hide
+                elif pistol_phase < 0.9:
+                    # New magazine coming up
+                    tilt_angle = 0.4
+                    mag_drop = 20 * (1 - (pistol_phase - 0.7) / 0.2)
+                else:
+                    # Tilt back up
+                    tilt_angle = 0.4 * (1 - (pistol_phase - 0.9) / 0.1)
+            pex = px + math.cos(angle + offset + tilt_angle) * (18 - pistol_recoil)
+            pey = py + math.sin(angle + offset + tilt_angle) * (18 - pistol_recoil)
             # Golden sheen animation
             gold_shift = int(20 * math.sin(self.anim_timer * 0.1 + i * math.pi))
             pygame.draw.line(screen, (220 + gold_shift, 180 + gold_shift//2, 50), (px, py), (pex, pey), 6)
             pygame.draw.circle(screen, (200, 160, 40), (int(pex), int(pey)), 3)
+            # Magazine - animate during reload
+            mag_x = (px + pex) / 2 + math.cos(angle + offset + math.pi/2) * (5 + mag_drop)
+            mag_y = (py + pey) / 2 + math.sin(angle + offset + math.pi/2) * (5 + mag_drop)
+            if mag_drop > -50:  # Only draw if not hidden
+                pygame.draw.rect(screen, (180, 140, 30), (int(mag_x) - 2, int(mag_y) - 3, 4, 6))
             # Muzzle flash on firing pistol
             if self.is_firing and (self.anim_timer // 3) % 2 == i:
                 flash_x = pex + math.cos(angle + offset) * 5
                 flash_y = pey + math.sin(angle + offset) * 5
                 pygame.draw.circle(screen, (255, 220, 100), (int(flash_x), int(flash_y)), 4)
+        # Reload indicator
+        if self.reloading:
+            pygame.draw.arc(screen, (255, 200, 50),
+                          (int(gun_start_x) - 12, int(gun_start_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
 
     def draw_crossbow(self, screen, sx, sy, recoil):
         """Draw crossbow with string vibration animation"""
@@ -3118,9 +3227,19 @@ class Player:
         # Limbs - flex when firing
         limb_x = gun_start_x + math.cos(angle) * 8
         limb_y = gun_start_y + math.sin(angle) * 8
-        # Limb flex animation after firing
+        # Limb flex animation after firing or during reload (drawing string back)
         limb_flex = 0
-        if self.is_firing:
+        string_draw_back = 0
+        if self.reloading:
+            if self.reload_phase < 0.6:
+                # Drawing string back - limbs bend
+                limb_flex = self.reload_phase / 0.6 * 0.2
+                string_draw_back = self.reload_phase / 0.6 * 8  # String pulls back
+            else:
+                # String fully drawn, loading bolt
+                limb_flex = 0.2
+                string_draw_back = 8
+        elif self.is_firing:
             limb_flex = math.sin(self.anim_timer * 1.5) * 0.15 * max(0, 1 - self.fire_cooldown / 20)
         limb_l_x = limb_x + math.cos(angle - math.pi/2 - 0.4 + limb_flex) * 15
         limb_l_y = limb_y + math.sin(angle - math.pi/2 - 0.4 + limb_flex) * 15
@@ -3128,19 +3247,37 @@ class Player:
         limb_r_y = limb_y + math.sin(angle + math.pi/2 + 0.4 - limb_flex) * 15
         pygame.draw.line(screen, (100, 70, 35), (limb_x, limb_y), (limb_l_x, limb_l_y), 5)
         pygame.draw.line(screen, (100, 70, 35), (limb_x, limb_y), (limb_r_x, limb_r_y), 5)
-        # String - vibrates after firing
+        # String - vibrates after firing, draws back during reload
         string_vibration = 0
         if self.is_firing and self.fire_cooldown > 0:
             string_vibration = math.sin(self.anim_timer * 2) * 3 * (self.fire_cooldown / 30)
-        string_mid_x = (limb_l_x + limb_r_x) / 2 + math.cos(angle) * string_vibration
-        string_mid_y = (limb_l_y + limb_r_y) / 2 + math.sin(angle) * string_vibration
+        string_mid_x = (limb_l_x + limb_r_x) / 2 + math.cos(angle) * (string_vibration - string_draw_back)
+        string_mid_y = (limb_l_y + limb_r_y) / 2 + math.sin(angle) * (string_vibration - string_draw_back)
         pygame.draw.line(screen, (180, 170, 150), (limb_l_x, limb_l_y), (int(string_mid_x), int(string_mid_y)), 2)
         pygame.draw.line(screen, (180, 170, 150), (int(string_mid_x), int(string_mid_y)), (limb_r_x, limb_r_y), 2)
-        # Bolt - only show when not reloading
-        if not self.reloading:
+        # Bolt - show loading animation during reload
+        if self.reloading:
+            if self.reload_phase >= 0.6:
+                # Bolt being placed on rail
+                bolt_progress = (self.reload_phase - 0.6) / 0.4
+                bolt_start_offset = (1 - bolt_progress) * 15  # Bolt comes from the side
+                bolt_x = limb_x + math.cos(angle + math.pi/2) * bolt_start_offset
+                bolt_y = limb_y + math.sin(angle + math.pi/2) * bolt_start_offset
+                # Bolt slides into position
+                bolt_end_x = bolt_x + math.cos(angle) * (10 + bolt_progress * 10)
+                bolt_end_y = bolt_y + math.sin(angle) * (10 + bolt_progress * 10)
+                pygame.draw.line(screen, (150, 140, 100), (bolt_x, bolt_y), (bolt_end_x, bolt_end_y), 3)
+                pygame.draw.circle(screen, (180, 180, 180), (int(bolt_end_x), int(bolt_end_y)), 2)
+        else:
+            # Normal bolt position
             pygame.draw.line(screen, (150, 140, 100), (limb_x, limb_y), (rail_end_x + math.cos(angle)*5, rail_end_y + math.sin(angle)*5), 3)
             # Bolt tip
             pygame.draw.circle(screen, (180, 180, 180), (int(rail_end_x + math.cos(angle)*7), int(rail_end_y + math.sin(angle)*7)), 2)
+        # Reload indicator
+        if self.reloading:
+            pygame.draw.arc(screen, (150, 100, 50),
+                          (int(gun_start_x) - 12, int(gun_start_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
 
     def draw_electric_gun(self, screen, sx, sy, recoil):
         """Draw electric/tesla gun (blue) with arcing electricity"""
@@ -3152,25 +3289,59 @@ class Player:
         barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
         # Body
         pygame.draw.line(screen, (50, 50, 80), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 9)
-        # Tesla coils with electricity arcs
+        # Capacitor on back - animate during reload
+        cap_charge = 1.0
+        cap_shake = 0
+        if self.reloading:
+            if self.reload_phase < 0.3:
+                # Capacitor discharges (dims and shrinks)
+                cap_charge = 1 - self.reload_phase / 0.3 * 0.9
+            elif self.reload_phase < 0.5:
+                # Fully discharged - dark
+                cap_charge = 0.1
+            else:
+                # Recharging - building up with shake
+                cap_charge = 0.1 + (self.reload_phase - 0.5) / 0.5 * 0.9
+                cap_shake = math.sin(self.anim_timer * 1.5) * 2 * (1 - (self.reload_phase - 0.5) / 0.5)
+        cap_x = gun_start_x + math.cos(angle + math.pi) * 6 + cap_shake
+        cap_y = gun_start_y + math.sin(angle + math.pi) * 6 + cap_shake
+        cap_brightness = int(255 * cap_charge)
+        pygame.draw.circle(screen, (int(50 * cap_charge), int(100 * cap_charge), cap_brightness), (int(cap_x), int(cap_y)), 6)
+        # Capacitor charge indicator ring
+        if cap_charge > 0.2:
+            pygame.draw.circle(screen, (int(100 * cap_charge), int(150 * cap_charge), cap_brightness), (int(cap_x), int(cap_y)), 4)
+        # Tesla coils with electricity arcs - dim during reload
+        coil_intensity = cap_charge
         for i in range(3):
             cx = gun_start_x + math.cos(angle) * (8 + i * 5)
             cy = gun_start_y + math.sin(angle) * (8 + i * 5)
             # Pulsing coils
-            pulse = math.sin(self.anim_timer * 0.4 + i * 1.2) * 1.5
-            pygame.draw.circle(screen, (100, 150, 255), (int(cx), int(cy)), int(3 + pulse))
-            # Random electricity arcs between coils
-            if i > 0 and (self.anim_timer + i * 7) % 10 < 5:
+            pulse = math.sin(self.anim_timer * 0.4 + i * 1.2) * 1.5 * coil_intensity
+            pygame.draw.circle(screen, (int(100 * coil_intensity), int(150 * coil_intensity), int(255 * coil_intensity)),
+                             (int(cx), int(cy)), int(max(2, 3 + pulse)))
+            # Random electricity arcs between coils - only when charged
+            if coil_intensity > 0.5 and i > 0 and (self.anim_timer + i * 7) % 10 < 5:
                 prev_cx = gun_start_x + math.cos(angle) * (8 + (i-1) * 5)
                 prev_cy = gun_start_y + math.sin(angle) * (8 + (i-1) * 5)
                 # Jagged arc
                 mid_x = (cx + prev_cx) / 2 + math.sin(self.anim_timer * 0.8 + i) * 4
                 mid_y = (cy + prev_cy) / 2 + math.cos(self.anim_timer * 0.8 + i) * 4
-                pygame.draw.line(screen, (180, 220, 255), (int(prev_cx), int(prev_cy)), (int(mid_x), int(mid_y)), 1)
-                pygame.draw.line(screen, (180, 220, 255), (int(mid_x), int(mid_y)), (int(cx), int(cy)), 1)
-        # Emitter with crackling effect
-        emit_pulse = math.sin(self.anim_timer * 0.3) * 2
-        pygame.draw.circle(screen, (150, 200, 255), (int(barrel_end_x), int(barrel_end_y)), int(5 + emit_pulse))
+                pygame.draw.line(screen, (int(180 * coil_intensity), int(220 * coil_intensity), 255),
+                               (int(prev_cx), int(prev_cy)), (int(mid_x), int(mid_y)), 1)
+                pygame.draw.line(screen, (int(180 * coil_intensity), int(220 * coil_intensity), 255),
+                               (int(mid_x), int(mid_y)), (int(cx), int(cy)), 1)
+        # Charging arcs during reload
+        if self.reloading and self.reload_phase > 0.5:
+            charge_intensity = (self.reload_phase - 0.5) / 0.5
+            for i in range(int(charge_intensity * 4)):
+                arc_angle = self.anim_timer * 0.5 + i * math.pi / 2
+                arc_x = cap_x + math.cos(arc_angle) * 10
+                arc_y = cap_y + math.sin(arc_angle) * 10
+                pygame.draw.line(screen, (150, 200, 255), (int(cap_x), int(cap_y)), (int(arc_x), int(arc_y)), 1)
+        # Emitter with crackling effect - dim during reload
+        emit_pulse = math.sin(self.anim_timer * 0.3) * 2 * coil_intensity
+        pygame.draw.circle(screen, (int(150 * coil_intensity), int(200 * coil_intensity), int(255 * coil_intensity)),
+                          (int(barrel_end_x), int(barrel_end_y)), int(max(3, 5 + emit_pulse)))
         # Electricity sparks when firing
         if self.is_firing:
             for j in range(3):
@@ -3179,6 +3350,11 @@ class Player:
                 spark_x = barrel_end_x + math.cos(spark_angle) * spark_len
                 spark_y = barrel_end_y + math.sin(spark_angle) * spark_len
                 pygame.draw.line(screen, (200, 230, 255), (int(barrel_end_x), int(barrel_end_y)), (int(spark_x), int(spark_y)), 2)
+        # Reload indicator
+        if self.reloading:
+            pygame.draw.arc(screen, (100, 150, 255),
+                          (int(gun_start_x) - 12, int(gun_start_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
 
     def draw_freeze_ray(self, screen, sx, sy, recoil):
         """Draw freeze ray (ice blue) with floating ice crystals"""
@@ -3192,21 +3368,63 @@ class Player:
         shimmer = int(20 * math.sin(self.anim_timer * 0.2))
         pygame.draw.line(screen, (100 + shimmer, 180, 220), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 8)
         pygame.draw.line(screen, (150 + shimmer, 210, 240), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 4)
-        # Floating frost crystals - orbit around the barrel
+        # Coolant tank on back - animate during reload
+        tank_level = 1.0
+        tank_drop = 0
+        if self.reloading:
+            if self.reload_phase < 0.2:
+                # Tank runs empty - level drops
+                tank_level = 1 - self.reload_phase / 0.2
+            elif self.reload_phase < 0.4:
+                # Empty tank detaches
+                tank_level = 0
+                tank_drop = (self.reload_phase - 0.2) / 0.2 * 15
+            elif self.reload_phase < 0.6:
+                # No tank (gap)
+                tank_drop = -100  # Hide
+            elif self.reload_phase < 0.8:
+                # New tank coming in
+                tank_level = 0
+                tank_drop = 15 * (1 - (self.reload_phase - 0.6) / 0.2)
+            else:
+                # Tank filling up with coolant
+                tank_level = (self.reload_phase - 0.8) / 0.2
+        tank_x = gun_start_x + math.cos(angle + math.pi) * 6 + math.cos(angle + math.pi/2) * tank_drop
+        tank_y = gun_start_y + math.sin(angle + math.pi) * 6 + math.sin(angle + math.pi/2) * tank_drop
+        if tank_drop > -50:  # Only draw if visible
+            # Tank body
+            pygame.draw.circle(screen, (80, 130, 160), (int(tank_x), int(tank_y)), 7)
+            # Coolant level inside tank
+            if tank_level > 0:
+                fill_height = int(6 * tank_level)
+                coolant_color = (int(150 + 50 * tank_level), int(220 * tank_level + 30), int(240 * tank_level + 15))
+                pygame.draw.circle(screen, coolant_color, (int(tank_x), int(tank_y)), int(max(2, fill_height)))
+            # Ice crystals forming when refilling
+            if self.reloading and self.reload_phase > 0.8:
+                for i in range(3):
+                    crystal_angle = self.anim_timer * 0.3 + i * math.pi * 2 / 3
+                    crystal_dist = 10 + math.sin(self.anim_timer * 0.5 + i) * 3
+                    crystal_x = tank_x + math.cos(crystal_angle) * crystal_dist
+                    crystal_y = tank_y + math.sin(crystal_angle) * crystal_dist
+                    pygame.draw.circle(screen, (220, 245, 255), (int(crystal_x), int(crystal_y)), 2)
+        # Floating frost crystals - orbit around the barrel (dim during reload)
+        crystal_intensity = 1.0 if not self.reloading else max(0.3, tank_level)
         for i in range(4):
             # Crystals orbit and float
             orbit_angle = self.anim_timer * 0.1 + i * (math.pi / 2)
             orbit_dist = 4 + math.sin(self.anim_timer * 0.15 + i) * 2
             base_x = gun_start_x + math.cos(angle) * (10 + i * 3)
             base_y = gun_start_y + math.sin(angle) * (10 + i * 3)
-            fx = base_x + math.cos(angle + math.pi/2) * math.sin(orbit_angle) * orbit_dist
-            fy = base_y + math.sin(angle + math.pi/2) * math.sin(orbit_angle) * orbit_dist
-            # Crystal sparkle
-            crystal_size = 2 + math.sin(self.anim_timer * 0.3 + i * 0.7) * 1
-            pygame.draw.circle(screen, (200, 240, 255), (int(fx), int(fy)), int(max(1, crystal_size)))
-        # Emitter with frost glow
-        emit_pulse = math.sin(self.anim_timer * 0.25) * 2
-        pygame.draw.circle(screen, (180, 230, 255), (int(barrel_end_x), int(barrel_end_y)), int(5 + emit_pulse))
+            fx = base_x + math.cos(angle + math.pi/2) * math.sin(orbit_angle) * orbit_dist * crystal_intensity
+            fy = base_y + math.sin(angle + math.pi/2) * math.sin(orbit_angle) * orbit_dist * crystal_intensity
+            # Crystal sparkle - fade during reload
+            crystal_size = (2 + math.sin(self.anim_timer * 0.3 + i * 0.7) * 1) * crystal_intensity
+            pygame.draw.circle(screen, (int(200 * crystal_intensity), int(240 * crystal_intensity), 255),
+                             (int(fx), int(fy)), int(max(1, crystal_size)))
+        # Emitter with frost glow - dim during reload
+        emit_pulse = math.sin(self.anim_timer * 0.25) * 2 * crystal_intensity
+        pygame.draw.circle(screen, (int(180 * crystal_intensity), int(230 * crystal_intensity), 255),
+                          (int(barrel_end_x), int(barrel_end_y)), int(max(3, 5 + emit_pulse)))
         # Ice mist when firing
         if self.is_firing:
             for j in range(4):
@@ -3216,28 +3434,78 @@ class Player:
                 mist_y = barrel_end_y + math.sin(mist_angle) * mist_dist
                 mist_size = 4 - j * 0.5 + math.sin(self.anim_timer * 0.5) * 1
                 pygame.draw.circle(screen, (220, 245, 255), (int(mist_x), int(mist_y)), int(max(1, mist_size)))
+        # Reload indicator
+        if self.reloading:
+            pygame.draw.arc(screen, (150, 220, 255),
+                          (int(gun_start_x) - 12, int(gun_start_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
 
     def draw_throwing_knives(self, screen, sx, sy):
         """Draw throwing knives (silver, fanned) with spinning ready-to-throw animation"""
         angle = self.angle
         hand_x = sx + math.cos(angle) * (self.radius + 5)
         hand_y = sy + math.sin(angle) * (self.radius + 5)
-        # Three knives fanned out with subtle bobbing
-        offsets = [-0.3, 0, 0.3]
-        for i, offset in enumerate(offsets):
-            # Each knife bobs slightly out of phase
-            bob = math.sin(self.anim_timer * 0.15 + i * 1.2) * 2
-            knife_len = 18 + bob
-            kex = hand_x + math.cos(angle + offset) * knife_len
-            key = hand_y + math.sin(angle + offset) * knife_len
-            # Silver sheen effect
-            sheen = int(15 * math.sin(self.anim_timer * 0.2 + i * 0.8))
-            pygame.draw.line(screen, (180 + sheen, 180 + sheen, 190 + sheen), (hand_x, hand_y), (kex, key), 3)
-            # Knife tip with glint
-            tip_glint = int(20 * abs(math.sin(self.anim_timer * 0.25 + i)))
-            pygame.draw.circle(screen, (200 + tip_glint, 200 + tip_glint, 210 + tip_glint), (int(kex), int(key)), 2)
+        # Knife holster/pouch on body (visible during reload)
+        holster_x = sx + math.cos(angle + math.pi) * 8
+        holster_y = sy + math.sin(angle + math.pi) * 8
+        pygame.draw.ellipse(screen, (80, 60, 40), (int(holster_x) - 5, int(holster_y) - 3, 10, 6))
+        # Draw knives being pulled from holster during reload
+        if self.reloading:
+            # Show knives in holster decreasing, knives in hand increasing
+            knives_in_hand = int(self.reload_phase * 3)  # 0, 1, 2, 3 knives
+            # Draw knives coming from holster to hand
+            for i in range(3):
+                knife_progress = max(0, min(1, (self.reload_phase - i * 0.3) / 0.3))
+                if knife_progress > 0 and knife_progress < 1:
+                    # Knife is being transferred
+                    # Path from holster to hand position
+                    start_x = holster_x
+                    start_y = holster_y
+                    end_offset = [-0.3, 0, 0.3][i]
+                    end_x = hand_x + math.cos(angle + end_offset) * 18
+                    end_y = hand_y + math.sin(angle + end_offset) * 18
+                    # Interpolate position
+                    current_x = start_x + (end_x - start_x) * knife_progress
+                    current_y = start_y + (end_y - start_y) * knife_progress
+                    # Draw transitioning knife with spin
+                    spin = knife_progress * math.pi * 2  # Full rotation during transfer
+                    knife_len = 8 + knife_progress * 10
+                    k1_x = current_x + math.cos(angle + spin) * knife_len/2
+                    k1_y = current_y + math.sin(angle + spin) * knife_len/2
+                    k2_x = current_x - math.cos(angle + spin) * knife_len/2
+                    k2_y = current_y - math.sin(angle + spin) * knife_len/2
+                    pygame.draw.line(screen, (180, 180, 190), (int(k1_x), int(k1_y)), (int(k2_x), int(k2_y)), 3)
+                elif knife_progress >= 1:
+                    # Knife is in hand - draw normally
+                    offset = [-0.3, 0, 0.3][i]
+                    bob = math.sin(self.anim_timer * 0.15 + i * 1.2) * 2
+                    knife_len = 18 + bob
+                    kex = hand_x + math.cos(angle + offset) * knife_len
+                    key = hand_y + math.sin(angle + offset) * knife_len
+                    sheen = int(15 * math.sin(self.anim_timer * 0.2 + i * 0.8))
+                    pygame.draw.line(screen, (180 + sheen, 180 + sheen, 190 + sheen), (hand_x, hand_y), (kex, key), 3)
+                    pygame.draw.circle(screen, (200, 200, 210), (int(kex), int(key)), 2)
+            # Reload indicator
+            pygame.draw.arc(screen, (180, 180, 200),
+                          (int(hand_x) - 12, int(hand_y) - 12, 24, 24),
+                          0, self.reload_phase * math.pi * 2, 2)
+        else:
+            # Normal display - Three knives fanned out with subtle bobbing
+            offsets = [-0.3, 0, 0.3]
+            for i, offset in enumerate(offsets):
+                # Each knife bobs slightly out of phase
+                bob = math.sin(self.anim_timer * 0.15 + i * 1.2) * 2
+                knife_len = 18 + bob
+                kex = hand_x + math.cos(angle + offset) * knife_len
+                key = hand_y + math.sin(angle + offset) * knife_len
+                # Silver sheen effect
+                sheen = int(15 * math.sin(self.anim_timer * 0.2 + i * 0.8))
+                pygame.draw.line(screen, (180 + sheen, 180 + sheen, 190 + sheen), (hand_x, hand_y), (kex, key), 3)
+                # Knife tip with glint
+                tip_glint = int(20 * abs(math.sin(self.anim_timer * 0.25 + i)))
+                pygame.draw.circle(screen, (200 + tip_glint, 200 + tip_glint, 210 + tip_glint), (int(kex), int(key)), 2)
         # When throwing, show spinning knife leaving
-        if self.is_firing:
+        if self.is_firing and not self.reloading:
             throw_progress = (self.fire_cooldown / 20) if hasattr(self, 'fire_cooldown') else 0
             spin_angle = self.anim_timer * 0.8  # Fast spin
             throw_x = hand_x + math.cos(angle) * (20 + (1 - throw_progress) * 15)
