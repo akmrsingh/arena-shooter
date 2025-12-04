@@ -5580,25 +5580,25 @@ class Game:
             self.screen.blit(txt, (x + width // 2 - txt.get_width() // 2, y + 6))
             self.menu_buttons[btn_name] = pygame.Rect(x, y, width, btn_h)
 
-        def draw_section(text, y, color):
+        def draw_section(text, x, y, color, width=btn_w):
             header = self.small_font.render(text, True, color)
-            self.screen.blit(header, (SCREEN_WIDTH // 2 - header.get_width() // 2, y))
-            pygame.draw.line(self.screen, (50, 50, 60), (left_col, y + 22), (right_col + btn_w, y + 22), 1)
+            self.screen.blit(header, (x + width // 2 - header.get_width() // 2, y))
+            pygame.draw.line(self.screen, (50, 50, 60), (x, y + 22), (x + width, y + 22), 1)
 
         # ===== SOLO MODE (Left Column) =====
-        draw_section("SOLO", 135, LIGHT_BLUE)
+        draw_section("SOLO", left_col, 135, LIGHT_BLUE)
         draw_btn("Easy", left_col, 160, GREEN, (20, 50, 20), "easy")
         draw_btn("Medium", left_col, 198, YELLOW, (50, 50, 20), "medium")
         draw_btn("Hard", left_col, 236, ORANGE, (50, 35, 10), "hard")
         draw_btn("Impossible", left_col, 274, RED, (50, 20, 20), "impossible")
 
         # ===== ONLINE MODE (Right Column) =====
-        draw_section("ONLINE", 135, (0, 200, 255))
+        draw_section("ONLINE", right_col, 135, (0, 200, 255))
         draw_btn("Co-op", right_col, 160, (0, 255, 200), (0, 40, 35), "online_coop")
         draw_btn("PvP", right_col, 198, (255, 100, 150), (40, 20, 30), "online_pvp")
 
         # ===== LOCAL 2-PLAYER =====
-        draw_section("LOCAL 2P", 320, ORANGE)
+        draw_section("LOCAL 2P", left_col, 320, ORANGE, right_col + btn_w - left_col)
         draw_btn("PvP 1v1", left_col, 345, (255, 100, 100), (50, 20, 20), "local_pvp")
         draw_btn("Co-op Easy", right_col, 345, GREEN, (20, 50, 20), "coop_easy")
         draw_btn("Co-op Med", left_col, 383, YELLOW, (50, 50, 20), "coop_med")
@@ -5606,7 +5606,7 @@ class Game:
         draw_btn("Co-op Imp", left_col, 421, RED, (50, 20, 20), "coop_imp")
 
         # ===== MAP SELECTION =====
-        draw_section("MAP", 465, (100, 180, 255))
+        draw_section("MAP", left_col, 465, (100, 180, 255), right_col + btn_w - left_col)
         map_y = 490
         # Left arrow
         draw_btn("<", left_col, map_y, (100, 180, 255), (30, 40, 60), "map_left", 40)
