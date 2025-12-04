@@ -5552,124 +5552,85 @@ class Game:
             self.screen.blit(user_text, (SCREEN_WIDTH // 2 - user_text.get_width() // 2, box_y + box_height + 30))
 
     def draw_menu(self):
-        self.screen.fill(DARK_GRAY)
+        self.screen.fill((25, 25, 35))  # Darker background
 
-        # Version number in top right
-        version = self.font.render("v3.0", True, WHITE)
+        # Title area with decorative line
+        title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
+        subtitle = self.font.render("ROBOT BATTLE", True, (200, 200, 200))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 30))
+        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 85))
+
+        # Decorative line under title
+        pygame.draw.line(self.screen, (60, 60, 80), (SCREEN_WIDTH // 2 - 200, 115), (SCREEN_WIDTH // 2 + 200, 115), 2)
+
+        # Version in corner
+        version = self.small_font.render("v3.0", True, (100, 100, 100))
         self.screen.blit(version, (SCREEN_WIDTH - version.get_width() - 10, 10))
 
-        title = self.big_font.render("ARENA SHOOTER 2D", True, RED)
-        subtitle = self.font.render("ROBOT BATTLE", True, WHITE)
+        # Two column layout
+        left_col = SCREEN_WIDTH // 2 - 160
+        right_col = SCREEN_WIDTH // 2 + 10
+        btn_w = 150
+        btn_h = 32
 
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
-        self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 150))
-
-        # Helper function to draw a menu button
-        def draw_menu_button(text, y, color, bg_color, btn_name):
-            btn_width = 280
-            btn_height = 26
-            btn_x = SCREEN_WIDTH // 2 - btn_width // 2
-            # Draw button background
-            pygame.draw.rect(self.screen, bg_color, (btn_x, y, btn_width, btn_height))
-            pygame.draw.rect(self.screen, color, (btn_x, y, btn_width, btn_height), 2)
-            # Draw text
-            text_render = self.small_font.render(text, True, color)
-            self.screen.blit(text_render, (SCREEN_WIDTH // 2 - text_render.get_width() // 2, y + 3))
-            # Store button rect
-            self.menu_buttons[btn_name] = pygame.Rect(btn_x, y, btn_width, btn_height)
-
-        # Solo mode section
-        solo_header = self.font.render("-- SOLO MODE --", True, LIGHT_BLUE)
-        self.screen.blit(solo_header, (SCREEN_WIDTH // 2 - solo_header.get_width() // 2, 200))
-
-        # Difficulty buttons
-        draw_menu_button("EASY - 8 Robots", 230, GREEN, (20, 60, 20), "easy")
-        draw_menu_button("MEDIUM - 15 Robots", 258, YELLOW, (60, 60, 20), "medium")
-        draw_menu_button("HARD - 25 Robots", 286, RED, (60, 20, 20), "hard")
-        draw_menu_button("IMPOSSIBLE - 5 Waves + BOSS", 314, (150, 0, 150), (40, 0, 40), "impossible")
-
-        # Online Multiplayer section (moved up for mobile - most used)
-        online_header = self.font.render("-- ONLINE MULTIPLAYER --", True, (0, 200, 255))
-        self.screen.blit(online_header, (SCREEN_WIDTH // 2 - online_header.get_width() // 2, 350))
-
-        draw_menu_button("ONLINE CO-OP - Team up vs robots", 380, (0, 255, 200), (0, 40, 30), "online_coop")
-        draw_menu_button("ONLINE PVP - Fight each other", 408, (255, 100, 150), (40, 15, 25), "online_pvp")
-
-        # Map selection with touch buttons
-        map_y = 445
-        map_btn_width = 50
-        left_btn_x = SCREEN_WIDTH // 2 - 140
-        right_btn_x = SCREEN_WIDTH // 2 + 90
-
-        # Left arrow button
-        pygame.draw.rect(self.screen, (50, 50, 70), (left_btn_x, map_y, map_btn_width, 30))
-        pygame.draw.rect(self.screen, (100, 200, 255), (left_btn_x, map_y, map_btn_width, 30), 2)
-        left_text = self.font.render("<", True, (100, 200, 255))
-        self.screen.blit(left_text, (left_btn_x + map_btn_width // 2 - left_text.get_width() // 2, map_y + 2))
-        self.menu_buttons["map_left"] = pygame.Rect(left_btn_x, map_y, map_btn_width, 30)
-
-        # Map name
-        map_display = self.font.render(self.selected_map.upper(), True, (100, 200, 255))
-        self.screen.blit(map_display, (SCREEN_WIDTH // 2 - map_display.get_width() // 2, map_y + 2))
-
-        # Right arrow button
-        pygame.draw.rect(self.screen, (50, 50, 70), (right_btn_x, map_y, map_btn_width, 30))
-        pygame.draw.rect(self.screen, (100, 200, 255), (right_btn_x, map_y, map_btn_width, 30), 2)
-        right_text = self.font.render(">", True, (100, 200, 255))
-        self.screen.blit(right_text, (right_btn_x + map_btn_width // 2 - right_text.get_width() // 2, map_y + 2))
-        self.menu_buttons["map_right"] = pygame.Rect(right_btn_x, map_y, map_btn_width, 30)
-
-        # Local multiplayer section (smaller for mobile)
-        multi_header = self.small_font.render("-- LOCAL 2P (same device) --", True, ORANGE)
-        self.screen.blit(multi_header, (SCREEN_WIDTH // 2 - multi_header.get_width() // 2, 490))
-
-        # Two columns for local modes
-        col1_x = SCREEN_WIDTH // 2 - 145
-        col2_x = SCREEN_WIDTH // 2 + 5
-        btn_w = 140
-        btn_h = 24
-
-        local_modes = [
-            ("PvP 1v1", 515, col1_x, (255, 100, 100), (60, 20, 20), "local_pvp"),
-            ("CO-OP Easy", 515, col2_x, GREEN, (20, 60, 20), "coop_easy"),
-            ("CO-OP Med", 541, col1_x, YELLOW, (60, 60, 20), "coop_med"),
-            ("CO-OP Hard", 541, col2_x, ORANGE, (60, 40, 0), "coop_hard"),
-            ("CO-OP Imp", 567, col1_x, RED, (60, 20, 20), "coop_imp"),
-        ]
-        for text, y, x, color, bg, name in local_modes:
-            pygame.draw.rect(self.screen, bg, (x, y, btn_w, btn_h))
-            pygame.draw.rect(self.screen, color, (x, y, btn_w, btn_h), 2)
+        def draw_btn(text, x, y, color, bg_color, btn_name, width=btn_w):
+            pygame.draw.rect(self.screen, bg_color, (x, y, width, btn_h), border_radius=4)
+            pygame.draw.rect(self.screen, color, (x, y, width, btn_h), 2, border_radius=4)
             txt = self.small_font.render(text, True, color)
-            self.screen.blit(txt, (x + btn_w // 2 - txt.get_width() // 2, y + 2))
-            self.menu_buttons[name] = pygame.Rect(x, y, btn_w, btn_h)
+            self.screen.blit(txt, (x + width // 2 - txt.get_width() // 2, y + 6))
+            self.menu_buttons[btn_name] = pygame.Rect(x, y, width, btn_h)
 
-        # Login button
-        login_y = 610
-        login_btn_width = 200
-        login_btn_x = SCREEN_WIDTH // 2 - login_btn_width // 2
-        if current_user:
-            pygame.draw.rect(self.screen, (40, 60, 40), (login_btn_x, login_y, login_btn_width, 28))
-            pygame.draw.rect(self.screen, GREEN, (login_btn_x, login_y, login_btn_width, 28), 2)
-            login_text = self.small_font.render(f"{current_user} (Logout)", True, GREEN)
-        else:
-            pygame.draw.rect(self.screen, (40, 40, 50), (login_btn_x, login_y, login_btn_width, 28))
-            pygame.draw.rect(self.screen, GRAY, (login_btn_x, login_y, login_btn_width, 28), 2)
-            login_text = self.small_font.render("Guest (Login)", True, GRAY)
-        self.screen.blit(login_text, (SCREEN_WIDTH // 2 - login_text.get_width() // 2, login_y + 4))
-        self.menu_buttons["login"] = pygame.Rect(login_btn_x, login_y, login_btn_width, 28)
+        def draw_section(text, y, color):
+            header = self.small_font.render(text, True, color)
+            self.screen.blit(header, (SCREEN_WIDTH // 2 - header.get_width() // 2, y))
+            pygame.draw.line(self.screen, (50, 50, 60), (left_col, y + 22), (right_col + btn_w, y + 22), 1)
 
-        # Touch controls toggle button
-        touch_y = 650
-        touch_btn_width = 180
-        touch_btn_x = SCREEN_WIDTH // 2 - touch_btn_width // 2
+        # ===== SOLO MODE (Left Column) =====
+        draw_section("SOLO", 135, LIGHT_BLUE)
+        draw_btn("Easy", left_col, 160, GREEN, (20, 50, 20), "easy")
+        draw_btn("Medium", left_col, 198, YELLOW, (50, 50, 20), "medium")
+        draw_btn("Hard", left_col, 236, ORANGE, (50, 35, 10), "hard")
+        draw_btn("Impossible", left_col, 274, RED, (50, 20, 20), "impossible")
+
+        # ===== ONLINE MODE (Right Column) =====
+        draw_section("ONLINE", 135, (0, 200, 255))
+        draw_btn("Co-op", right_col, 160, (0, 255, 200), (0, 40, 35), "online_coop")
+        draw_btn("PvP", right_col, 198, (255, 100, 150), (40, 20, 30), "online_pvp")
+
+        # ===== LOCAL 2-PLAYER =====
+        draw_section("LOCAL 2P", 320, ORANGE)
+        draw_btn("PvP 1v1", left_col, 345, (255, 100, 100), (50, 20, 20), "local_pvp")
+        draw_btn("Co-op Easy", right_col, 345, GREEN, (20, 50, 20), "coop_easy")
+        draw_btn("Co-op Med", left_col, 383, YELLOW, (50, 50, 20), "coop_med")
+        draw_btn("Co-op Hard", right_col, 383, ORANGE, (50, 35, 10), "coop_hard")
+        draw_btn("Co-op Imp", left_col, 421, RED, (50, 20, 20), "coop_imp")
+
+        # ===== MAP SELECTION =====
+        draw_section("MAP", 465, (100, 180, 255))
+        map_y = 490
+        # Left arrow
+        draw_btn("<", left_col, map_y, (100, 180, 255), (30, 40, 60), "map_left", 40)
+        # Map name (centered)
+        map_name = self.font.render(self.selected_map.upper(), True, (100, 180, 255))
+        self.screen.blit(map_name, (SCREEN_WIDTH // 2 - map_name.get_width() // 2, map_y + 4))
+        # Right arrow
+        draw_btn(">", right_col + btn_w - 40, map_y, (100, 180, 255), (30, 40, 60), "map_right", 40)
+
+        # ===== SETTINGS ROW =====
+        settings_y = 545
+        pygame.draw.line(self.screen, (50, 50, 60), (left_col, settings_y - 10), (right_col + btn_w, settings_y - 10), 1)
+
+        # Touch controls toggle
         touch_status = "ON" if self.mobile_controls else "OFF"
-        touch_color = GREEN if self.mobile_controls else GRAY
-        touch_bg = (20, 60, 20) if self.mobile_controls else (40, 40, 40)
-        pygame.draw.rect(self.screen, touch_bg, (touch_btn_x, touch_y, touch_btn_width, 28))
-        pygame.draw.rect(self.screen, touch_color, (touch_btn_x, touch_y, touch_btn_width, 28), 2)
-        touch_text = self.small_font.render(f"Touch Controls: {touch_status}", True, touch_color)
-        self.screen.blit(touch_text, (SCREEN_WIDTH // 2 - touch_text.get_width() // 2, touch_y + 4))
-        self.menu_buttons["touch_toggle"] = pygame.Rect(touch_btn_x, touch_y, touch_btn_width, 28)
+        touch_color = GREEN if self.mobile_controls else (100, 100, 100)
+        touch_bg = (20, 50, 20) if self.mobile_controls else (35, 35, 40)
+        draw_btn(f"Touch: {touch_status}", left_col, settings_y, touch_color, touch_bg, "touch_toggle")
+
+        # Login/Account
+        if current_user:
+            draw_btn(f"{current_user[:8]}", right_col, settings_y, GREEN, (20, 50, 20), "login")
+        else:
+            draw_btn("Login", right_col, settings_y, (150, 150, 150), (35, 35, 40), "login")
 
         # Controls hint (only on desktop)
         if not IS_MOBILE:
