@@ -2540,6 +2540,22 @@ class Player:
             self.draw_rpg(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
         elif weapon_name == "Sniper":
             self.draw_sniper(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Minigun":
+            self.draw_minigun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Flamethrower":
+            self.draw_flamethrower(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Laser Gun":
+            self.draw_laser_gun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Dual Pistols":
+            self.draw_dual_pistols(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Crossbow":
+            self.draw_crossbow(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Electric Gun":
+            self.draw_electric_gun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Freeze Ray":
+            self.draw_freeze_ray(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Throwing Knives":
+            self.draw_throwing_knives(screen, sx, sy)
         else:
             # Fallback to simple gun
             gun_length = self.radius + self.weapon["gun_length"] - recoil_offset
@@ -2839,6 +2855,152 @@ class Player:
         bipod_end_y = bipod_y + math.sin(bipod_angle) * 6
         pygame.draw.line(screen, (60, 60, 60), (bipod_x, bipod_y), (bipod_end_x, bipod_end_y), 2)
 
+    def draw_minigun(self, screen, sx, sy, recoil):
+        """Draw multi-barrel minigun"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        barrel_length = 32 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+        # Main body
+        pygame.draw.line(screen, (60, 60, 65), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 12)
+        # Multiple barrels
+        for offset in [-0.15, 0, 0.15]:
+            bx = gun_start_x + math.cos(angle + offset) * 10
+            by = gun_start_y + math.sin(angle + offset) * 10
+            bex = gun_start_x + math.cos(angle + offset) * barrel_length
+            bey = gun_start_y + math.sin(angle + offset) * barrel_length
+            pygame.draw.line(screen, (40, 40, 45), (bx, by), (bex, bey), 4)
+        # Ammo drum
+        drum_x = gun_start_x + math.cos(angle + math.pi/2) * 10
+        drum_y = gun_start_y + math.sin(angle + math.pi/2) * 10
+        pygame.draw.circle(screen, (80, 70, 60), (int(drum_x), int(drum_y)), 8)
+
+    def draw_flamethrower(self, screen, sx, sy, recoil):
+        """Draw flamethrower"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        tube_length = 28 - recoil
+        tube_end_x = gun_start_x + math.cos(angle) * tube_length
+        tube_end_y = gun_start_y + math.sin(angle) * tube_length
+        # Main tube
+        pygame.draw.line(screen, (70, 70, 75), (gun_start_x, gun_start_y), (tube_end_x, tube_end_y), 10)
+        # Fuel tank on back
+        tank_x = gun_start_x + math.cos(angle + math.pi) * 8
+        tank_y = gun_start_y + math.sin(angle + math.pi) * 8
+        pygame.draw.circle(screen, (200, 80, 30), (int(tank_x), int(tank_y)), 8)
+        # Pilot flame
+        pygame.draw.circle(screen, (255, 150, 50), (int(tube_end_x), int(tube_end_y)), 5)
+        pygame.draw.circle(screen, (255, 220, 100), (int(tube_end_x), int(tube_end_y)), 3)
+
+    def draw_laser_gun(self, screen, sx, sy, recoil):
+        """Draw laser gun (green)"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        barrel_length = 24 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+        # Body
+        pygame.draw.line(screen, (40, 80, 40), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 8)
+        # Energy coils
+        for i in range(3):
+            cx = gun_start_x + math.cos(angle) * (8 + i * 5)
+            cy = gun_start_y + math.sin(angle) * (8 + i * 5)
+            pygame.draw.circle(screen, (50, 255, 100), (int(cx), int(cy)), 3)
+        # Emitter
+        pygame.draw.circle(screen, (100, 255, 100), (int(barrel_end_x), int(barrel_end_y)), 5)
+
+    def draw_dual_pistols(self, screen, sx, sy, recoil):
+        """Draw golden dual pistols"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        # Two pistols
+        for offset in [-0.25, 0.25]:
+            px = gun_start_x
+            py = gun_start_y
+            pex = px + math.cos(angle + offset) * (18 - recoil)
+            pey = py + math.sin(angle + offset) * (18 - recoil)
+            pygame.draw.line(screen, (220, 180, 50), (px, py), (pex, pey), 6)
+            pygame.draw.circle(screen, (200, 160, 40), (int(pex), int(pey)), 3)
+
+    def draw_crossbow(self, screen, sx, sy, recoil):
+        """Draw crossbow"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        rail_length = 25 - recoil
+        rail_end_x = gun_start_x + math.cos(angle) * rail_length
+        rail_end_y = gun_start_y + math.sin(angle) * rail_length
+        # Main rail (brown wood)
+        pygame.draw.line(screen, (120, 80, 40), (gun_start_x, gun_start_y), (rail_end_x, rail_end_y), 6)
+        # Limbs
+        limb_x = gun_start_x + math.cos(angle) * 8
+        limb_y = gun_start_y + math.sin(angle) * 8
+        limb_l_x = limb_x + math.cos(angle - math.pi/2 - 0.4) * 15
+        limb_l_y = limb_y + math.sin(angle - math.pi/2 - 0.4) * 15
+        limb_r_x = limb_x + math.cos(angle + math.pi/2 + 0.4) * 15
+        limb_r_y = limb_y + math.sin(angle + math.pi/2 + 0.4) * 15
+        pygame.draw.line(screen, (100, 70, 35), (limb_x, limb_y), (limb_l_x, limb_l_y), 5)
+        pygame.draw.line(screen, (100, 70, 35), (limb_x, limb_y), (limb_r_x, limb_r_y), 5)
+        # String
+        pygame.draw.line(screen, (180, 170, 150), (limb_l_x, limb_l_y), (limb_r_x, limb_r_y), 2)
+        # Bolt
+        if not self.reloading:
+            pygame.draw.line(screen, (150, 140, 100), (limb_x, limb_y), (rail_end_x + math.cos(angle)*5, rail_end_y + math.sin(angle)*5), 3)
+
+    def draw_electric_gun(self, screen, sx, sy, recoil):
+        """Draw electric/tesla gun (blue)"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        barrel_length = 24 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+        # Body
+        pygame.draw.line(screen, (50, 50, 80), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 9)
+        # Tesla coils
+        for i in range(3):
+            cx = gun_start_x + math.cos(angle) * (8 + i * 5)
+            cy = gun_start_y + math.sin(angle) * (8 + i * 5)
+            pygame.draw.circle(screen, (100, 150, 255), (int(cx), int(cy)), 3)
+        # Emitter
+        pygame.draw.circle(screen, (150, 200, 255), (int(barrel_end_x), int(barrel_end_y)), 5)
+
+    def draw_freeze_ray(self, screen, sx, sy, recoil):
+        """Draw freeze ray (ice blue)"""
+        angle = self.angle
+        gun_start_x = sx + math.cos(angle) * self.radius
+        gun_start_y = sy + math.sin(angle) * self.radius
+        barrel_length = 22 - recoil
+        barrel_end_x = gun_start_x + math.cos(angle) * barrel_length
+        barrel_end_y = gun_start_y + math.sin(angle) * barrel_length
+        # Body (ice blue)
+        pygame.draw.line(screen, (100, 180, 220), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 8)
+        pygame.draw.line(screen, (150, 210, 240), (gun_start_x, gun_start_y), (barrel_end_x, barrel_end_y), 4)
+        # Frost crystals
+        for i in range(3):
+            fx = gun_start_x + math.cos(angle) * (8 + i * 4)
+            fy = gun_start_y + math.sin(angle) * (8 + i * 4)
+            pygame.draw.circle(screen, (200, 240, 255), (int(fx), int(fy)), 2)
+        # Emitter
+        pygame.draw.circle(screen, (180, 230, 255), (int(barrel_end_x), int(barrel_end_y)), 5)
+
+    def draw_throwing_knives(self, screen, sx, sy):
+        """Draw throwing knives (silver, fanned)"""
+        angle = self.angle
+        hand_x = sx + math.cos(angle) * (self.radius + 5)
+        hand_y = sy + math.sin(angle) * (self.radius + 5)
+        # Three knives fanned out
+        for offset in [-0.3, 0, 0.3]:
+            kex = hand_x + math.cos(angle + offset) * 18
+            key = hand_y + math.sin(angle + offset) * 18
+            pygame.draw.line(screen, (180, 180, 190), (hand_x, hand_y), (kex, key), 3)
+            pygame.draw.circle(screen, (200, 200, 210), (int(kex), int(key)), 2)
+
 
 class Player2(Player):
     """Second player for PvP and Co-op modes - uses IJKL for movement, aims with numpad"""
@@ -2972,6 +3134,22 @@ class Player2(Player):
             self.draw_rpg(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
         elif weapon_name == "Sniper":
             self.draw_sniper(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
+        elif weapon_name == "Minigun":
+            self.draw_minigun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Flamethrower":
+            self.draw_flamethrower(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Laser Gun":
+            self.draw_laser_gun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Dual Pistols":
+            self.draw_dual_pistols(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Crossbow":
+            self.draw_crossbow(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Electric Gun":
+            self.draw_electric_gun(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Freeze Ray":
+            self.draw_freeze_ray(screen, sx, sy, recoil_offset)
+        elif weapon_name == "Throwing Knives":
+            self.draw_throwing_knives(screen, sx, sy)
         else:
             # Fallback to simple gun
             gun_length = self.radius + self.weapon["gun_length"] - recoil_offset
