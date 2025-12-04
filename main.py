@@ -3041,45 +3041,18 @@ class Player:
         tube_end_y = gun_start_y + math.sin(angle) * tube_length
         # Main tube
         pygame.draw.line(screen, (70, 70, 75), (gun_start_x, gun_start_y), (tube_end_x, tube_end_y), 10)
-        # Fuel tank on back - animate during reload (tank swap)
-        tank_drop = 0
-        if self.reloading:
-            if self.reload_phase < 0.3:
-                tank_drop = self.reload_phase / 0.3 * 15  # Tank detaches
-            elif self.reload_phase < 0.6:
-                tank_drop = 15 + 10  # Tank falls away
-            else:
-                tank_drop = 25 * (1 - (self.reload_phase - 0.6) / 0.4)  # New tank attaches
-        tank_x = gun_start_x + math.cos(angle + math.pi) * 8 + math.cos(angle + math.pi/2) * tank_drop
-        tank_y = gun_start_y + math.sin(angle + math.pi) * 8 + math.sin(angle + math.pi/2) * tank_drop
-        # Tank fill level indicator
-        tank_color = (200, 80, 30) if not self.reloading else (150, 60, 20)
+        # Fuel tank on back
+        tank_x = gun_start_x + math.cos(angle + math.pi) * 8
+        tank_y = gun_start_y + math.sin(angle + math.pi) * 8
+        tank_color = (200, 80, 30) if not self.reloading else (100, 50, 20)
         pygame.draw.circle(screen, tank_color, (int(tank_x), int(tank_y)), 8)
-        # Fuel level indicator during reload
-        if self.reloading and self.reload_phase > 0.6:
-            fill_level = (self.reload_phase - 0.6) / 0.4
-            pygame.draw.arc(screen, (255, 150, 50), (int(tank_x)-6, int(tank_y)-6, 12, 12),
-                           -math.pi/2, -math.pi/2 + fill_level * math.pi * 2, 2)
-        # Fuel hose connecting tank to gun
-        if not self.reloading or self.reload_phase > 0.7:
-            hose_x = gun_start_x + math.cos(angle + math.pi) * 3
-            hose_y = gun_start_y + math.sin(angle + math.pi) * 3
-            pygame.draw.line(screen, (60, 60, 60), (int(tank_x), int(tank_y)), (int(hose_x), int(hose_y)), 2)
-        # Animated pilot flame - flickers based on timer (dim during reload)
-        flicker = math.sin(self.anim_timer * 0.5) * 2
-        flame_size = 5 + flicker if not self.reloading else 2
-        # Outer flame (orange) - small during reload
-        pygame.draw.circle(screen, (255, 120 + int(flicker * 15), 30), (int(tube_end_x), int(tube_end_y)), int(flame_size))
-        # Inner flame (yellow)
-        pygame.draw.circle(screen, (255, 220 + int(flicker * 10), 80), (int(tube_end_x), int(tube_end_y)), int(flame_size * 0.6))
-        # When firing, add big flame burst
+        # Pilot flame
+        pygame.draw.circle(screen, (255, 150, 30), (int(tube_end_x), int(tube_end_y)), 5)
+        # When firing, add flame
         if self.is_firing:
-            for i in range(3):
-                burst_dist = 8 + i * 6 + math.sin(self.anim_timer * 0.8 + i) * 3
-                burst_x = tube_end_x + math.cos(angle) * burst_dist
-                burst_y = tube_end_y + math.sin(angle) * burst_dist
-                burst_size = 8 - i * 2 + math.sin(self.anim_timer * 0.6) * 2
-                pygame.draw.circle(screen, (255, 150 - i * 30, 50), (int(burst_x), int(burst_y)), int(max(2, burst_size)))
+            flame_x = tube_end_x + math.cos(angle) * 12
+            flame_y = tube_end_y + math.sin(angle) * 12
+            pygame.draw.circle(screen, (255, 100, 30), (int(flame_x), int(flame_y)), 8)
 
     def draw_laser_gun(self, screen, sx, sy, recoil):
         """Draw laser gun (green) with pulsing energy coils"""
