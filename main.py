@@ -5761,41 +5761,31 @@ class Game:
         mode_label = self.font.render("Game Mode:", True, WHITE)
         self.screen.blit(mode_label, (box_x + 30, box_y + 20))
 
-        # Co-op option
+        # Row 1: Co-op, PvP
         coop_color = GREEN if self.online_game_mode == "coop" else GRAY
         coop_text = self.font.render("[1] CO-OP", True, coop_color)
-        coop_desc = self.small_font.render("2P vs robots", True, coop_color)
-        self.screen.blit(coop_text, (box_x + 30, box_y + 55))
-        self.screen.blit(coop_desc, (box_x + 130, box_y + 58))
+        self.screen.blit(coop_text, (box_x + 30, box_y + 50))
 
-        # PvP option
         pvp_color = RED if self.online_game_mode == "pvp" else GRAY
         pvp_text = self.font.render("[2] PVP", True, pvp_color)
-        pvp_desc = self.small_font.render("1v1", True, pvp_color)
-        self.screen.blit(pvp_text, (box_x + 250, box_y + 55))
-        self.screen.blit(pvp_desc, (box_x + 320, box_y + 58))
+        self.screen.blit(pvp_text, (box_x + 180, box_y + 50))
 
-        # 2v2 option
+        # Row 2: 2v2, 2v1
         color_2v2 = (255, 200, 50) if self.online_game_mode == "2v2" else GRAY
         text_2v2 = self.font.render("[3] 2v2", True, color_2v2)
-        desc_2v2 = self.small_font.render("Teams", True, color_2v2)
-        self.screen.blit(text_2v2, (box_x + 380, box_y + 55))
-        self.screen.blit(desc_2v2, (box_x + 450, box_y + 58))
+        self.screen.blit(text_2v2, (box_x + 300, box_y + 50))
 
-        # 2v1 option
         color_2v1 = (200, 100, 255) if self.online_game_mode == "2v1" else GRAY
         text_2v1 = self.font.render("[4] 2v1", True, color_2v1)
-        desc_2v1 = self.small_font.render("Uneven", True, color_2v1)
-        self.screen.blit(text_2v1, (box_x + 30, box_y + 85))
-        self.screen.blit(desc_2v1, (box_x + 100, box_y + 88))
+        self.screen.blit(text_2v1, (box_x + 420, box_y + 50))
 
         # Separator
-        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 115), (box_x + box_width - 20, box_y + 115), 1)
+        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 85), (box_x + box_width - 20, box_y + 85), 1)
 
         # Difficulty selection (for co-op and 2v2/2v1 modes)
         if self.online_game_mode in ["coop", "2v2", "2v1"]:
             diff_label = self.font.render("Difficulty:", True, WHITE)
-            self.screen.blit(diff_label, (box_x + 30, box_y + 125))
+            self.screen.blit(diff_label, (box_x + 30, box_y + 95))
 
             # Arrow buttons and difficulty display
             left_arrow = self.font.render("<", True, YELLOW)
@@ -5805,19 +5795,19 @@ class Game:
             diff_color = diff_colors.get(self.online_difficulty, WHITE)
             diff_text = self.font.render(diff_name, True, diff_color)
 
-            self.screen.blit(left_arrow, (box_x + 180, box_y + 125))
-            self.screen.blit(diff_text, (box_x + 220, box_y + 125))
-            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 125))
+            self.screen.blit(left_arrow, (box_x + 180, box_y + 95))
+            self.screen.blit(diff_text, (box_x + 220, box_y + 95))
+            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 95))
 
             arrow_hint = self.small_font.render("[LEFT/RIGHT] to change", True, GRAY)
-            self.screen.blit(arrow_hint, (box_x + 330, box_y + 128))
+            self.screen.blit(arrow_hint, (box_x + 350, box_y + 98))
 
             # Second separator
-            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 160), (box_x + box_width - 20, box_y + 160), 1)
-            options_start_y = box_y + 175
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 130), (box_x + box_width - 20, box_y + 130), 1)
+            options_start_y = box_y + 145
         else:
             # PvP mode - no difficulty selector, start options after separator
-            options_start_y = box_y + 130
+            options_start_y = box_y + 100
 
         # Options
         host_text = self.font.render("[H] HOST GAME", True, GREEN)
