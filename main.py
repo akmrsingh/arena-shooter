@@ -4628,7 +4628,9 @@ class Game:
                 "health": player.health,
                 "weapon_idx": player.weapon_idx if hasattr(player, 'weapon_idx') else 0,
                 "shooting": pygame.mouse.get_pressed()[0],
-                "name": self.player_name if self.player_name else self.username_input
+                "name": self.player_name if self.player_name else self.username_input,
+                "gameover": self.state == "gameover",
+                "i_won": self.pvp_winner == "Player 1" if self.pvp_winner else False
             }
 
             window.MP.sendData(json.dumps(state))
@@ -4678,6 +4680,14 @@ class Game:
                                     result.owner = "player2"
                                     self.bullets.append(result)
 
+                        # Handle gameover sync for online PvP
+                        if self.game_mode == "online_pvp" and state.get("gameover"):
+                            if state.get("i_won"):
+                                # Remote player won, so we lost
+                                self.pvp_winner = "Player 2"
+                                self.state = "gameover"
+                                self.stop_music()
+
                 except json.JSONDecodeError:
                     pass
         except Exception as e:
@@ -4689,13 +4699,13 @@ class Game:
             self.update_online_connection()
             return
 
-        if self.state != "playing":
-            return
-
-        # Handle online multiplayer sync
-        if self.game_mode in ["online_coop", "online_pvp"]:
+        # Handle online multiplayer sync (even during gameover to sync winner/loser)
+        if self.game_mode in ["online_coop", "online_pvp", "online_2v2", "online_2v1"]:
             self.send_game_state()
             self.receive_game_state()
+
+        if self.state != "playing":
+            return
 
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
@@ -5709,10 +5719,17 @@ class Game:
 
         # Result - different for PvP mode
         if self.game_mode in ["pvp", "online_pvp"] and self.pvp_winner:
-            result = self.big_font.render(f"{self.pvp_winner} WINS!", True, GREEN)
             if self.game_mode == "online_pvp":
-                subtitle = self.font.render("Online PvP Battle Complete", True, YELLOW)
+                # For online PvP, show YOU WIN! or YOU LOSE! based on who won
+                if self.pvp_winner == "Player 1":
+                    result = self.big_font.render("YOU WIN!", True, GREEN)
+                    subtitle = self.font.render("You defeated your opponent!", True, GREEN)
+                else:
+                    result = self.big_font.render("YOU LOSE!", True, RED)
+                    subtitle = self.font.render("Your opponent won the battle!", True, RED)
             else:
+                # Local PvP shows Player 1/2 wins
+                result = self.big_font.render(f"{self.pvp_winner} WINS!", True, GREEN)
                 subtitle = self.font.render("PvP Battle Complete", True, YELLOW)
             self.screen.blit(result, (SCREEN_WIDTH // 2 - result.get_width() // 2, 280))
             self.screen.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, 360))
