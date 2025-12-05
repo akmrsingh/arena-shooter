@@ -889,8 +889,8 @@ class Grenade:
         self.angle = angle
         self.speed = 10
         self.radius = 8
-        self.damage = 100
-        self.explosion_radius = 120
+        self.damage = 150  # High explosive damage
+        self.explosion_radius = 150  # Larger explosion radius
         self.lifetime = 90  # Explodes after ~1.5 seconds (more time to roll)
         self.color = (100, 80, 60)
         self.exploded = False
@@ -1729,9 +1729,9 @@ class Player:
             {"name": "Handgun", "ammo": 17, "max_ammo": 17, "reloads": 6, "fire_rate": 8, "damage": 18,
              "bullet_speed": 20, "color": (255, 200, 100), "gun_length": 10, "gun_width": 4,
              "melee": False, "grenade": False, "recoil": 2, "reload_time": 60},
-            # Knife - melee weapon
-            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20,
-             "damage": 45, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
+            # Knife - melee weapon (high damage, close range)
+            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 15,
+             "damage": 75, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
              "melee": True, "grenade": False, "recoil": 0},
             # Grenade - explosive
             {"name": "Grenade", "ammo": 4, "max_ammo": 4, "reloads": 0, "fire_rate": 50, "damage": 150,
@@ -3254,9 +3254,9 @@ class Player2(Player):
             {"name": "Handgun", "ammo": 17, "max_ammo": 17, "reloads": 6, "fire_rate": 8, "damage": 18,
              "bullet_speed": 20, "color": (255, 200, 100), "gun_length": 10, "gun_width": 4,
              "melee": False, "grenade": False, "recoil": 2, "reload_time": 60},
-            # Knife
-            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 20,
-             "damage": 45, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
+            # Knife (high damage, close range)
+            {"name": "Knife", "ammo": 999, "max_ammo": 999, "reloads": 999, "fire_rate": 15,
+             "damage": 75, "bullet_speed": 0, "color": WHITE, "gun_length": 12, "gun_width": 3,
              "melee": True, "grenade": False, "recoil": 0},
             # Grenade
             {"name": "Grenade", "ammo": 4, "max_ammo": 4, "reloads": 0, "fire_rate": 50, "damage": 150,
@@ -4481,7 +4481,12 @@ class Game:
                         if result:
                             grenade = Grenade(result["x"], result["y"], result["angle"])
                             self.grenades.append(grenade)
-                    elif not self.player.weapon.get("melee", False):
+                    elif self.player.weapon.get("melee", False):
+                        # Knife melee attack
+                        result = self.player.shoot()
+                        if result and isinstance(result, dict) and result.get("melee"):
+                            self.handle_melee_attack(result)
+                    else:
                         result = self.player.shoot()
                         if result:
                             self.bullets.append(result)
