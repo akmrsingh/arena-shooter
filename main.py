@@ -5799,12 +5799,12 @@ class Game:
             self.screen.blit(diff_text, (box_x + 220, box_y + 95))
             self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 95))
 
-            arrow_hint = self.small_font.render("[LEFT/RIGHT] to change", True, GRAY)
-            self.screen.blit(arrow_hint, (box_x + 350, box_y + 98))
+            arrow_hint = self.small_font.render("[LEFT/RIGHT] to change difficulty", True, GRAY)
+            self.screen.blit(arrow_hint, (box_x + 30, box_y + 118))
 
             # Second separator
-            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 130), (box_x + box_width - 20, box_y + 130), 1)
-            options_start_y = box_y + 145
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 140), (box_x + box_width - 20, box_y + 140), 1)
+            options_start_y = box_y + 155
         else:
             # PvP mode - no difficulty selector, start options after separator
             options_start_y = box_y + 100
