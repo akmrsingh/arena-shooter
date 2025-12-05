@@ -5768,24 +5768,24 @@ class Game:
 
         pvp_color = RED if self.online_game_mode == "pvp" else GRAY
         pvp_text = self.font.render("[2] PVP", True, pvp_color)
-        self.screen.blit(pvp_text, (box_x + 180, box_y + 50))
+        self.screen.blit(pvp_text, (box_x + 280, box_y + 50))
 
         # Row 2: 2v2, 2v1
         color_2v2 = (255, 200, 50) if self.online_game_mode == "2v2" else GRAY
         text_2v2 = self.font.render("[3] 2v2", True, color_2v2)
-        self.screen.blit(text_2v2, (box_x + 300, box_y + 50))
+        self.screen.blit(text_2v2, (box_x + 30, box_y + 80))
 
         color_2v1 = (200, 100, 255) if self.online_game_mode == "2v1" else GRAY
         text_2v1 = self.font.render("[4] 2v1", True, color_2v1)
-        self.screen.blit(text_2v1, (box_x + 420, box_y + 50))
+        self.screen.blit(text_2v1, (box_x + 280, box_y + 80))
 
         # Separator
-        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 85), (box_x + box_width - 20, box_y + 85), 1)
+        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 115), (box_x + box_width - 20, box_y + 115), 1)
 
         # Difficulty selection (for co-op and 2v2/2v1 modes)
         if self.online_game_mode in ["coop", "2v2", "2v1"]:
             diff_label = self.font.render("Difficulty:", True, WHITE)
-            self.screen.blit(diff_label, (box_x + 30, box_y + 95))
+            self.screen.blit(diff_label, (box_x + 30, box_y + 125))
 
             # Arrow buttons and difficulty display
             left_arrow = self.font.render("<", True, YELLOW)
@@ -5795,19 +5795,19 @@ class Game:
             diff_color = diff_colors.get(self.online_difficulty, WHITE)
             diff_text = self.font.render(diff_name, True, diff_color)
 
-            self.screen.blit(left_arrow, (box_x + 180, box_y + 95))
-            self.screen.blit(diff_text, (box_x + 220, box_y + 95))
-            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 95))
+            self.screen.blit(left_arrow, (box_x + 180, box_y + 125))
+            self.screen.blit(diff_text, (box_x + 220, box_y + 125))
+            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 125))
 
             arrow_hint = self.small_font.render("[LEFT/RIGHT] to change difficulty", True, GRAY)
-            self.screen.blit(arrow_hint, (box_x + 30, box_y + 118))
+            self.screen.blit(arrow_hint, (box_x + 30, box_y + 148))
 
             # Second separator
-            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 140), (box_x + box_width - 20, box_y + 140), 1)
-            options_start_y = box_y + 155
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 170), (box_x + box_width - 20, box_y + 170), 1)
+            options_start_y = box_y + 185
         else:
             # PvP mode - no difficulty selector, start options after separator
-            options_start_y = box_y + 100
+            options_start_y = box_y + 130
 
         # Options
         host_text = self.font.render("[H] HOST GAME", True, GREEN)
