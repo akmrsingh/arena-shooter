@@ -5152,32 +5152,30 @@ class Game:
 
     def draw_player_names(self, surface, camera):
         """Draw player names above players in online multiplayer"""
-        name_font = pygame.font.SysFont('Arial', 14)
+        name_font = pygame.font.SysFont('Arial', 16, bold=True)
 
-        # Draw local player name (YOU)
+        # Draw "YOU" above local player
         if self.player and self.player.health > 0:
-            local_name = self.player_name if self.player_name else self.username_input
-            if local_name:
-                sx, sy = camera.apply(self.player.x, self.player.y)
-                # Add "(You)" suffix to distinguish
-                display_name = f"{local_name} (You)"
-                name_surface = name_font.render(display_name, True, (100, 200, 255))
-                name_x = sx - name_surface.get_width() // 2
-                name_y = sy - self.player.radius - 35
-                # Background for readability
-                bg_rect = pygame.Rect(name_x - 3, name_y - 2, name_surface.get_width() + 6, name_surface.get_height() + 4)
-                pygame.draw.rect(surface, (0, 0, 0, 150), bg_rect, border_radius=3)
-                surface.blit(name_surface, (name_x, name_y))
-
-        # Draw remote player name
-        if self.player2 and self.player2.health > 0 and self.remote_player_name:
-            sx, sy = camera.apply(self.player2.x, self.player2.y)
-            name_surface = name_font.render(self.remote_player_name, True, (255, 150, 100))
+            sx, sy = camera.apply(self.player.x, self.player.y)
+            name_surface = name_font.render("YOU", True, (100, 200, 255))
             name_x = sx - name_surface.get_width() // 2
-            name_y = sy - self.player2.radius - 35
+            name_y = sy - self.player.radius - 30
             # Background for readability
-            bg_rect = pygame.Rect(name_x - 3, name_y - 2, name_surface.get_width() + 6, name_surface.get_height() + 4)
-            pygame.draw.rect(surface, (0, 0, 0, 150), bg_rect, border_radius=3)
+            bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
+            pygame.draw.rect(surface, (0, 0, 0, 180), bg_rect, border_radius=4)
+            surface.blit(name_surface, (name_x, name_y))
+
+        # Draw remote player's username above them
+        if self.player2 and self.player2.health > 0:
+            sx, sy = camera.apply(self.player2.x, self.player2.y)
+            # Show username or "Player 2" if no name
+            display_name = self.remote_player_name if self.remote_player_name else "Player 2"
+            name_surface = name_font.render(display_name, True, (255, 150, 100))
+            name_x = sx - name_surface.get_width() // 2
+            name_y = sy - self.player2.radius - 30
+            # Background for readability
+            bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
+            pygame.draw.rect(surface, (0, 0, 0, 180), bg_rect, border_radius=4)
             surface.blit(name_surface, (name_x, name_y))
 
     def draw_split_screen_hud(self, surface, player, is_player1, width):
