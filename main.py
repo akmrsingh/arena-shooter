@@ -3545,9 +3545,9 @@ class Game:
             self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
             self.player2 = None
 
-        # Enable split-screen only for PvP mode (players need separate views to hide from each other)
-        # Co-op modes use shared screen with camera following midpoint between players
-        if self.game_mode == "pvp":
+        # Enable split-screen for local multiplayer modes (pvp and coop)
+        # Each player gets their own view with their own camera
+        if self.game_mode in ["pvp", "coop"]:
             self.split_screen = True
             half_width = SCREEN_WIDTH // 2
             self.camera = Camera(half_width, SCREEN_HEIGHT)
@@ -5239,13 +5239,20 @@ class Game:
         bar_width = min(150, width - 20)
         bar_height = 20
         bar_x = 10
-        bar_y = 10
+        bar_y = 35
 
-        # Player label
+        # Big player label at top center of each half
+        if is_player1:
+            title = self.font.render("PLAYER 1", True, LIGHT_BLUE)
+        else:
+            title = self.font.render("PLAYER 2", True, (100, 150, 255))
+        surface.blit(title, (width // 2 - title.get_width() // 2, 5))
+
+        # Small P1/P2 label next to health bar
         if is_player1:
             label = self.small_font.render("P1", True, LIGHT_BLUE)
         else:
-            label = self.small_font.render("P2", True, (30, 60, 150))
+            label = self.small_font.render("P2", True, (100, 150, 255))
         surface.blit(label, (bar_x, bar_y - 5))
 
         # Health bar
