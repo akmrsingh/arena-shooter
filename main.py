@@ -3440,6 +3440,8 @@ class Game:
         self.online_difficulty_index = 1  # Default to medium
         self.player_name = ""  # Local player's display name
         self.remote_player_name = ""  # Remote player's display name
+        self.remote_player3 = None  # For 2v2/2v1 modes (enemy team player 1)
+        self.remote_player4 = None  # For 2v2/2v1 modes (enemy team player 2)
 
         # Login system
         self.username_input = ""
@@ -3516,6 +3518,29 @@ class Game:
             self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
             # In online_coop, player2 is controlled by remote player
             self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
+        elif self.game_mode == "online_2v2":
+            # 2v2: Two local players (left side) vs two remote players (right side)
+            self.player = Player(MAP_WIDTH // 4 - 50, MAP_HEIGHT // 2)
+            self.player2 = Player2(MAP_WIDTH // 4 + 50, MAP_HEIGHT // 2)
+            # Remote players will be controlled via network (player3, player4)
+            self.remote_player3 = Player(3 * MAP_WIDTH // 4 - 50, MAP_HEIGHT // 2)
+            self.remote_player4 = Player2(3 * MAP_WIDTH // 4 + 50, MAP_HEIGHT // 2)
+        elif self.game_mode == "online_2v1":
+            # 2v1: Host has 2 players, joiner has 1
+            if self.is_host:
+                # Host team (2 players on left)
+                self.player = Player(MAP_WIDTH // 4 - 50, MAP_HEIGHT // 2)
+                self.player2 = Player2(MAP_WIDTH // 4 + 50, MAP_HEIGHT // 2)
+                # Remote solo player (right)
+                self.remote_player3 = Player(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.remote_player4 = None
+            else:
+                # Joiner is solo (right side)
+                self.player = Player(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.player2 = None
+                # Remote team (left) - 2 players
+                self.remote_player3 = Player(MAP_WIDTH // 4 - 50, MAP_HEIGHT // 2)
+                self.remote_player4 = Player2(MAP_WIDTH // 4 + 50, MAP_HEIGHT // 2)
         else:
             self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
             self.player2 = None
@@ -3820,8 +3845,8 @@ class Game:
         if difficulty == "impossible":
             self.player.health = 10000
             self.player.max_health = 10000
-        # Only spawn robots in non-PvP modes (PvP is player vs player only)
-        if self.game_mode not in ["pvp", "online_pvp"]:
+        # Only spawn robots in co-op/team modes (PvP is player vs player only)
+        if self.game_mode not in ["pvp", "online_pvp", "online_2v2", "online_2v1"]:
             self.spawn_robots()
         self.state = "playing"
         self.play_boss_music()
@@ -4011,6 +4036,16 @@ class Game:
                             self.online_message = ""
                         elif btn_name == "online_pvp":
                             self.online_game_mode = "pvp"
+                            self.state = "online_menu"
+                            self.online_input_code = ""
+                            self.online_message = ""
+                        elif btn_name == "online_2v2":
+                            self.online_game_mode = "2v2"
+                            self.state = "online_menu"
+                            self.online_input_code = ""
+                            self.online_message = ""
+                        elif btn_name == "online_2v1":
+                            self.online_game_mode = "2v1"
                             self.state = "online_menu"
                             self.online_input_code = ""
                             self.online_message = ""
@@ -4365,19 +4400,28 @@ class Game:
                         # Select PvP mode (only when not entering room code)
                         self.online_game_mode = "pvp"
                         self.online_message = "1v1 PVP mode selected"
-                    elif event.key == pygame.K_LEFT and self.online_game_mode == "coop":
+                    elif event.key == pygame.K_3 and not self.online_input_active:
+                        # Select 2v2 mode
+                        self.online_game_mode = "2v2"
+                        self.online_message = "2v2 TEAM mode selected"
+                    elif event.key == pygame.K_4 and not self.online_input_active:
+                        # Select 2v1 mode
+                        self.online_game_mode = "2v1"
+                        self.online_message = "2v1 mode selected"
+                    elif event.key == pygame.K_LEFT and self.online_game_mode in ["coop", "2v2", "2v1"]:
                         # Previous difficulty
                         self.online_difficulty_index = (self.online_difficulty_index - 1) % len(self.online_difficulty_options)
                         self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
                         self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
-                    elif event.key == pygame.K_RIGHT and self.online_game_mode == "coop":
+                    elif event.key == pygame.K_RIGHT and self.online_game_mode in ["coop", "2v2", "2v1"]:
                         # Next difficulty
                         self.online_difficulty_index = (self.online_difficulty_index + 1) % len(self.online_difficulty_options)
                         self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
                         self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
                     elif event.key == pygame.K_h:
                         # Host a game
-                        mode_name = "CO-OP" if self.online_game_mode == "coop" else "1v1 PVP"
+                        mode_names = {"coop": "CO-OP", "pvp": "1v1 PVP", "2v2": "2v2 TEAM", "2v1": "2v1"}
+                        mode_name = mode_names.get(self.online_game_mode, "")
                         self.online_message = f"Creating {mode_name} room..."
                         self.is_host = True
                         self.state = "waiting"
@@ -4544,6 +4588,12 @@ class Game:
                 if self.online_game_mode == "pvp":
                     self.game_mode = "online_pvp"
                     self.start_game("medium")  # PvP doesn't need difficulty
+                elif self.online_game_mode == "2v2":
+                    self.game_mode = "online_2v2"
+                    self.start_game(self.online_difficulty)
+                elif self.online_game_mode == "2v1":
+                    self.game_mode = "online_2v1"
+                    self.start_game(self.online_difficulty)
                 else:
                     self.game_mode = "online_coop"
                     self.start_game(self.online_difficulty)  # Use selected difficulty
@@ -5137,9 +5187,14 @@ class Game:
         self.player.draw(surface, camera)
         if self.player2 and self.player2.health > 0:
             self.player2.draw(surface, camera)
+        # Draw enemy team players (for 2v2 and 2v1 modes)
+        if self.remote_player3 and self.remote_player3.health > 0:
+            self.remote_player3.draw(surface, camera)
+        if self.remote_player4 and self.remote_player4.health > 0:
+            self.remote_player4.draw(surface, camera)
 
         # Draw player names in online multiplayer
-        if self.game_mode in ["online_coop", "online_pvp"]:
+        if self.game_mode in ["online_coop", "online_pvp", "online_2v2", "online_2v1"]:
             self.draw_player_names(surface, camera)
 
         # Draw muzzle flashes
@@ -5154,29 +5209,30 @@ class Game:
         """Draw player names above players in online multiplayer"""
         name_font = pygame.font.SysFont('Arial', 16, bold=True)
 
-        # Draw "YOU" above local player
-        if self.player and self.player.health > 0:
-            sx, sy = camera.apply(self.player.x, self.player.y)
-            name_surface = name_font.render("YOU", True, (100, 200, 255))
-            name_x = sx - name_surface.get_width() // 2
-            name_y = sy - self.player.radius - 30
-            # Background for readability
-            bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
-            pygame.draw.rect(surface, (0, 0, 0, 180), bg_rect, border_radius=4)
-            surface.blit(name_surface, (name_x, name_y))
+        def draw_name_label(player, text, color):
+            if player and player.health > 0:
+                sx, sy = camera.apply(player.x, player.y)
+                name_surface = name_font.render(text, True, color)
+                name_x = sx - name_surface.get_width() // 2
+                name_y = sy - player.radius - 30
+                bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
+                pygame.draw.rect(surface, (0, 0, 0, 180), bg_rect, border_radius=4)
+                surface.blit(name_surface, (name_x, name_y))
 
-        # Draw remote player's username above them
-        if self.player2 and self.player2.health > 0:
-            sx, sy = camera.apply(self.player2.x, self.player2.y)
-            # Show username or "Player 2" if no name
+        # Draw "YOU" above local player
+        draw_name_label(self.player, "YOU", (100, 200, 255))
+
+        # For team modes (2v2, 2v1), show teammate and enemies
+        if self.game_mode in ["online_2v2", "online_2v1"]:
+            # Local teammate (player2)
+            draw_name_label(self.player2, "ALLY", (100, 255, 150))
+            # Enemy players
+            draw_name_label(self.remote_player3, "ENEMY", (255, 100, 100))
+            draw_name_label(self.remote_player4, "ENEMY", (255, 100, 100))
+        else:
+            # Regular online modes - show remote player's username
             display_name = self.remote_player_name if self.remote_player_name else "Player 2"
-            name_surface = name_font.render(display_name, True, (255, 150, 100))
-            name_x = sx - name_surface.get_width() // 2
-            name_y = sy - self.player2.radius - 30
-            # Background for readability
-            bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
-            pygame.draw.rect(surface, (0, 0, 0, 180), bg_rect, border_radius=4)
-            surface.blit(name_surface, (name_x, name_y))
+            draw_name_label(self.player2, display_name, (255, 150, 100))
 
     def draw_split_screen_hud(self, surface, player, is_player1, width):
         """Draw HUD for one player in split-screen mode"""
@@ -5594,18 +5650,20 @@ class Game:
         draw_section("ONLINE", right_col, 135, (0, 200, 255))
         draw_btn("Co-op", right_col, 160, (0, 255, 200), (0, 40, 35), "online_coop")
         draw_btn("PvP", right_col, 198, (255, 100, 150), (40, 20, 30), "online_pvp")
+        draw_btn("2v2", right_col, 236, (255, 200, 50), (50, 40, 10), "online_2v2")
+        draw_btn("2v1", right_col, 274, (200, 100, 255), (40, 20, 50), "online_2v1")
 
         # ===== LOCAL 2-PLAYER =====
-        draw_section("LOCAL 2P", left_col, 320, ORANGE, right_col + btn_w - left_col)
-        draw_btn("PvP 1v1", left_col, 345, (255, 100, 100), (50, 20, 20), "local_pvp")
-        draw_btn("Co-op Easy", right_col, 345, GREEN, (20, 50, 20), "coop_easy")
-        draw_btn("Co-op Med", left_col, 383, YELLOW, (50, 50, 20), "coop_med")
-        draw_btn("Co-op Hard", right_col, 383, ORANGE, (50, 35, 10), "coop_hard")
-        draw_btn("Co-op Imp", left_col, 421, RED, (50, 20, 20), "coop_imp")
+        draw_section("LOCAL 2P", left_col, 330, ORANGE, right_col + btn_w - left_col)
+        draw_btn("PvP 1v1", left_col, 355, (255, 100, 100), (50, 20, 20), "local_pvp")
+        draw_btn("Co-op Easy", right_col, 355, GREEN, (20, 50, 20), "coop_easy")
+        draw_btn("Co-op Med", left_col, 393, YELLOW, (50, 50, 20), "coop_med")
+        draw_btn("Co-op Hard", right_col, 393, ORANGE, (50, 35, 10), "coop_hard")
+        draw_btn("Co-op Imp", left_col, 431, RED, (50, 20, 20), "coop_imp")
 
         # ===== MAP SELECTION =====
-        draw_section("MAP", left_col, 465, (100, 180, 255), right_col + btn_w - left_col)
-        map_y = 490
+        draw_section("MAP", left_col, 475, (100, 180, 255), right_col + btn_w - left_col)
+        map_y = 500
         # Left arrow
         draw_btn("<", left_col, map_y, (100, 180, 255), (30, 40, 60), "map_left", 40)
         # Map name (centered)
@@ -5615,7 +5673,7 @@ class Game:
         draw_btn(">", right_col + btn_w - 40, map_y, (100, 180, 255), (30, 40, 60), "map_right", 40)
 
         # ===== SETTINGS ROW =====
-        settings_y = 545
+        settings_y = 555
         pygame.draw.line(self.screen, (50, 50, 60), (left_col, settings_y - 10), (right_col + btn_w, settings_y - 10), 1)
 
         # Touch controls toggle
@@ -5706,24 +5764,38 @@ class Game:
         # Co-op option
         coop_color = GREEN if self.online_game_mode == "coop" else GRAY
         coop_text = self.font.render("[1] CO-OP", True, coop_color)
-        coop_desc = self.small_font.render("Team up vs robots", True, coop_color)
-        self.screen.blit(coop_text, (box_x + 50, box_y + 55))
-        self.screen.blit(coop_desc, (box_x + 160, box_y + 58))
+        coop_desc = self.small_font.render("2P vs robots", True, coop_color)
+        self.screen.blit(coop_text, (box_x + 30, box_y + 55))
+        self.screen.blit(coop_desc, (box_x + 130, box_y + 58))
 
         # PvP option
         pvp_color = RED if self.online_game_mode == "pvp" else GRAY
-        pvp_text = self.font.render("[2] 1v1 PVP", True, pvp_color)
-        pvp_desc = self.small_font.render("Fight each other", True, pvp_color)
-        self.screen.blit(pvp_text, (box_x + 300, box_y + 55))
-        self.screen.blit(pvp_desc, (box_x + 420, box_y + 58))
+        pvp_text = self.font.render("[2] PVP", True, pvp_color)
+        pvp_desc = self.small_font.render("1v1", True, pvp_color)
+        self.screen.blit(pvp_text, (box_x + 250, box_y + 55))
+        self.screen.blit(pvp_desc, (box_x + 320, box_y + 58))
+
+        # 2v2 option
+        color_2v2 = (255, 200, 50) if self.online_game_mode == "2v2" else GRAY
+        text_2v2 = self.font.render("[3] 2v2", True, color_2v2)
+        desc_2v2 = self.small_font.render("Teams", True, color_2v2)
+        self.screen.blit(text_2v2, (box_x + 380, box_y + 55))
+        self.screen.blit(desc_2v2, (box_x + 450, box_y + 58))
+
+        # 2v1 option
+        color_2v1 = (200, 100, 255) if self.online_game_mode == "2v1" else GRAY
+        text_2v1 = self.font.render("[4] 2v1", True, color_2v1)
+        desc_2v1 = self.small_font.render("Uneven", True, color_2v1)
+        self.screen.blit(text_2v1, (box_x + 30, box_y + 85))
+        self.screen.blit(desc_2v1, (box_x + 100, box_y + 88))
 
         # Separator
-        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 95), (box_x + box_width - 20, box_y + 95), 1)
+        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 115), (box_x + box_width - 20, box_y + 115), 1)
 
-        # Difficulty selection (only for co-op mode)
-        if self.online_game_mode == "coop":
+        # Difficulty selection (for co-op and 2v2/2v1 modes)
+        if self.online_game_mode in ["coop", "2v2", "2v1"]:
             diff_label = self.font.render("Difficulty:", True, WHITE)
-            self.screen.blit(diff_label, (box_x + 30, box_y + 105))
+            self.screen.blit(diff_label, (box_x + 30, box_y + 125))
 
             # Arrow buttons and difficulty display
             left_arrow = self.font.render("<", True, YELLOW)
@@ -5733,19 +5805,19 @@ class Game:
             diff_color = diff_colors.get(self.online_difficulty, WHITE)
             diff_text = self.font.render(diff_name, True, diff_color)
 
-            self.screen.blit(left_arrow, (box_x + 180, box_y + 105))
-            self.screen.blit(diff_text, (box_x + 220, box_y + 105))
-            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 105))
+            self.screen.blit(left_arrow, (box_x + 180, box_y + 125))
+            self.screen.blit(diff_text, (box_x + 220, box_y + 125))
+            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 125))
 
             arrow_hint = self.small_font.render("[LEFT/RIGHT] to change", True, GRAY)
-            self.screen.blit(arrow_hint, (box_x + 330, box_y + 108))
+            self.screen.blit(arrow_hint, (box_x + 330, box_y + 128))
 
             # Second separator
-            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 140), (box_x + box_width - 20, box_y + 140), 1)
-            options_start_y = box_y + 155
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 160), (box_x + box_width - 20, box_y + 160), 1)
+            options_start_y = box_y + 175
         else:
             # PvP mode - no difficulty selector, start options after separator
-            options_start_y = box_y + 110
+            options_start_y = box_y + 130
 
         # Options
         host_text = self.font.render("[H] HOST GAME", True, GREEN)
