@@ -643,18 +643,18 @@ class Avatar:
         self.avatar_type = avatar_type
         self.config = AVATAR_TYPES.get(avatar_type, AVATAR_TYPES["default"])
 
-        # Body part sizes (relative to player radius of 18)
-        self.head_radius = 9
-        self.neck_length = 3
-        self.torso_width = 16
-        self.torso_height = 14
-        self.shoulder_width = 18
-        self.arm_length = 14
-        self.arm_width = 5
-        self.hand_radius = 4
-        self.leg_length = 12
-        self.leg_width = 6
-        self.foot_length = 6
+        # Body part sizes - realistic proportions (bigger body, smaller head)
+        self.head_radius = 7  # Smaller head
+        self.neck_length = 4
+        self.torso_width = 24  # Much wider torso
+        self.torso_height = 22  # Taller torso
+        self.shoulder_width = 28  # Broad shoulders
+        self.arm_length = 20  # Longer arms
+        self.arm_width = 7
+        self.hand_radius = 5
+        self.leg_length = 18  # Longer legs
+        self.leg_width = 8
+        self.foot_length = 9
 
         # Animation state
         self.walk_cycle = 0  # 0-1 for walk animation
@@ -686,31 +686,31 @@ class Avatar:
         # Determine which side the character is aiming (for flipping)
         aiming_right = -math.pi/2 < aim_angle < math.pi/2
 
-        # Draw shadow under character
-        shadow_surface = pygame.Surface((30, 16), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surface, (0, 0, 0, 40), (0, 0, 30, 16))
-        screen.blit(shadow_surface, (int(x - 15), int(y + 10)))
+        # Draw larger shadow under character
+        shadow_surface = pygame.Surface((50, 24), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow_surface, (0, 0, 0, 50), (0, 0, 50, 24))
+        screen.blit(shadow_surface, (int(x - 25), int(y + 18)))
 
         # Draw layers from back to front
         # 1. Back leg
-        self._draw_leg(screen, x, y, body_angle, is_back=True)
+        self._draw_leg(screen, x, y + 5, body_angle, is_back=True)
 
         # 2. Back arm (support hand for weapon)
-        self._draw_arm(screen, x, y, aim_angle, is_front=False, is_reloading=is_reloading,
+        self._draw_arm(screen, x, y - 5, aim_angle, is_front=False, is_reloading=is_reloading,
                       reload_phase=reload_phase, weapon_name=weapon_name, anim_timer=anim_timer)
 
         # 3. Torso with breathing
         self._draw_torso(screen, x, y + breath_offset, body_angle)
 
         # 4. Neck
-        self._draw_neck(screen, x, y - 4 + breath_offset)
+        self._draw_neck(screen, x, y - 10 + breath_offset)
 
         # 5. Head (slightly turns toward aim direction)
         head_turn = aim_angle * 0.2  # Head turns slightly toward aim
-        self._draw_head(screen, x, y - 6 + breath_offset, head_turn, aim_angle, anim_timer)
+        self._draw_head(screen, x, y - 14 + breath_offset, head_turn, aim_angle, anim_timer)
 
         # 6. Front leg
-        self._draw_leg(screen, x, y, body_angle, is_back=False)
+        self._draw_leg(screen, x, y + 5, body_angle, is_back=False)
 
         # 7. Front arm (holding weapon) - drawn by weapon system
         # The weapon drawing functions will call draw_holding_hand
@@ -718,20 +718,25 @@ class Avatar:
     def _draw_neck(self, screen, x, y):
         """Draw the neck connecting head to torso"""
         config = self.config
+        skin = config["skin_color"]
         # Darker skin for neck shadow
-        neck_color = tuple(max(0, c - 25) for c in config["skin_color"])
-        pygame.draw.ellipse(screen, neck_color, (int(x - 4), int(y - 2), 8, 6))
+        neck_color = tuple(max(0, c - 25) for c in skin)
+        neck_light = tuple(min(255, c + 10) for c in skin)
+        # Larger neck
+        pygame.draw.ellipse(screen, neck_color, (int(x - 6), int(y - 3), 12, 10))
+        pygame.draw.ellipse(screen, skin, (int(x - 5), int(y - 2), 10, 8))
+        pygame.draw.ellipse(screen, neck_light, (int(x - 3), int(y - 1), 6, 4))
 
     def _draw_head(self, screen, x, y, angle, aim_angle, anim_timer):
-        """Draw the head with realistic features"""
+        """Draw the head with realistic features and prominent eyes"""
         config = self.config
 
         # Head position (slight turn based on aim)
-        head_x = x + math.sin(angle) * 1
-        head_y = y - 2
+        head_x = x + math.sin(angle) * 2
+        head_y = y
 
         # Create head surface for proper layering
-        head_size = self.head_radius * 3
+        head_size = self.head_radius * 4  # Larger surface
         head_surface = pygame.Surface((head_size, head_size), pygame.SRCALPHA)
 
         # Base head shape with shadow gradient effect
@@ -739,66 +744,87 @@ class Avatar:
         skin_dark = tuple(max(0, c - 30) for c in skin)
         skin_light = tuple(min(255, c + 20) for c in skin)
 
-        # Draw head shadow (back of head)
+        # Draw head shadow (back of head) - proportional to head_radius
+        hr = self.head_radius
         pygame.draw.ellipse(head_surface, skin_dark,
-                           (head_size//2 - 8, head_size//2 - 10, 16, 20))
+                           (head_size//2 - hr, head_size//2 - hr - 2, hr * 2, hr * 2 + 4))
 
         # Draw main head
         pygame.draw.ellipse(head_surface, skin,
-                           (head_size//2 - 7, head_size//2 - 9, 14, 18))
+                           (head_size//2 - hr + 1, head_size//2 - hr - 1, hr * 2 - 2, hr * 2 + 2))
 
         # Draw highlight on forehead
         pygame.draw.ellipse(head_surface, skin_light,
-                           (head_size//2 - 4, head_size//2 - 8, 8, 6))
+                           (head_size//2 - hr//2, head_size//2 - hr, hr, hr//2 + 2))
 
         # Rotate head surface
         rotated = pygame.transform.rotate(head_surface, -math.degrees(angle))
         rect = rotated.get_rect(center=(int(head_x), int(head_y)))
         screen.blit(rotated, rect)
 
-        # Draw facial features (eyes that look toward aim)
-        eye_offset_x = math.cos(aim_angle) * 2  # Eyes look toward aim
-        eye_offset_y = math.sin(aim_angle) * 1
+        # Draw facial features - BIGGER EYES that look toward aim
+        eye_offset_x = math.cos(aim_angle) * 3  # Eyes look toward aim
+        eye_offset_y = math.sin(aim_angle) * 2
 
-        # Left eye
-        eye_lx = head_x - 3 + math.sin(angle) * 2
-        eye_ly = head_y - 1
-        # Eye white
-        pygame.draw.ellipse(screen, (240, 240, 240),
-                           (int(eye_lx - 2), int(eye_ly - 1), 4, 3))
-        # Pupil (looks toward aim)
-        pygame.draw.circle(screen, (40, 30, 20),
-                          (int(eye_lx + eye_offset_x * 0.3), int(eye_ly + eye_offset_y * 0.3)), 1)
+        # Eye spacing based on head size
+        eye_spacing = 4
 
-        # Right eye
-        eye_rx = head_x + 3 + math.sin(angle) * 2
-        eye_ry = head_y - 1
-        pygame.draw.ellipse(screen, (240, 240, 240),
-                           (int(eye_rx - 2), int(eye_ry - 1), 4, 3))
-        pygame.draw.circle(screen, (40, 30, 20),
-                          (int(eye_rx + eye_offset_x * 0.3), int(eye_ry + eye_offset_y * 0.3)), 1)
+        # Left eye - bigger and more visible
+        eye_lx = head_x - eye_spacing
+        eye_ly = head_y + 1
+        # Eye socket shadow
+        pygame.draw.ellipse(screen, skin_dark,
+                           (int(eye_lx - 4), int(eye_ly - 3), 8, 6))
+        # Eye white (sclera)
+        pygame.draw.ellipse(screen, (255, 255, 255),
+                           (int(eye_lx - 3), int(eye_ly - 2), 7, 5))
+        # Iris (colored part)
+        iris_x = eye_lx + eye_offset_x * 0.3
+        iris_y = eye_ly + eye_offset_y * 0.3
+        pygame.draw.circle(screen, (70, 50, 30), (int(iris_x), int(iris_y)), 2)
+        # Pupil (black center)
+        pygame.draw.circle(screen, (10, 10, 10), (int(iris_x), int(iris_y)), 1)
+        # Eye shine/reflection
+        pygame.draw.circle(screen, (255, 255, 255), (int(iris_x - 1), int(iris_y - 1)), 1)
 
-        # Draw eyebrows
+        # Right eye - bigger and more visible
+        eye_rx = head_x + eye_spacing
+        eye_ry = head_y + 1
+        # Eye socket shadow
+        pygame.draw.ellipse(screen, skin_dark,
+                           (int(eye_rx - 4), int(eye_ry - 3), 8, 6))
+        # Eye white (sclera)
+        pygame.draw.ellipse(screen, (255, 255, 255),
+                           (int(eye_rx - 3), int(eye_ry - 2), 7, 5))
+        # Iris (colored part)
+        iris_rx = eye_rx + eye_offset_x * 0.3
+        iris_ry = eye_ry + eye_offset_y * 0.3
+        pygame.draw.circle(screen, (70, 50, 30), (int(iris_rx), int(iris_ry)), 2)
+        # Pupil (black center)
+        pygame.draw.circle(screen, (10, 10, 10), (int(iris_rx), int(iris_ry)), 1)
+        # Eye shine/reflection
+        pygame.draw.circle(screen, (255, 255, 255), (int(iris_rx - 1), int(iris_ry - 1)), 1)
+
+        # Draw eyebrows - thicker and more visible
         brow_color = tuple(max(0, c - 40) for c in config["hair_color"])
         pygame.draw.line(screen, brow_color,
-                        (int(eye_lx - 2), int(eye_ly - 3)),
-                        (int(eye_lx + 2), int(eye_ly - 2)), 1)
+                        (int(eye_lx - 4), int(eye_ly - 5)),
+                        (int(eye_lx + 3), int(eye_ly - 4)), 2)
         pygame.draw.line(screen, brow_color,
-                        (int(eye_rx - 2), int(eye_ry - 2)),
-                        (int(eye_rx + 2), int(eye_ry - 3)), 1)
+                        (int(eye_rx - 3), int(eye_ry - 4)),
+                        (int(eye_rx + 4), int(eye_ry - 5)), 2)
 
-        # Draw nose (small shadow)
-        nose_y = head_y + 2
-        pygame.draw.line(screen, skin_dark,
-                        (int(head_x), int(nose_y - 1)),
-                        (int(head_x), int(nose_y + 1)), 1)
+        # Draw nose (more visible)
+        nose_y = head_y + 4
+        pygame.draw.ellipse(screen, skin_dark,
+                           (int(head_x - 2), int(nose_y - 1), 4, 3))
 
-        # Draw ears
+        # Draw ears - larger
         ear_color = tuple(max(0, c - 15) for c in skin)
         pygame.draw.ellipse(screen, ear_color,
-                           (int(head_x - 9), int(head_y - 2), 4, 5))
+                           (int(head_x - hr - 2), int(head_y - 1), 5, 7))
         pygame.draw.ellipse(screen, ear_color,
-                           (int(head_x + 5), int(head_y - 2), 4, 5))
+                           (int(head_x + hr - 3), int(head_y - 1), 5, 7))
 
         # Draw hair based on style
         hair_style = config["hair_style"]
