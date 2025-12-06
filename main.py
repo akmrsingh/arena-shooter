@@ -530,17 +530,18 @@ DIFFICULTY = {
 # Avatar types - realistic character designs with body parts
 AVATAR_TYPES = {
     "default": {
-        "name": "Soldier",
+        "name": "T-800",
         "price": 0,  # Free default avatar
-        "skin_color": (210, 180, 140),  # Tan skin
-        "shirt_color": (60, 80, 60),  # Military green
-        "pants_color": (50, 60, 50),  # Dark green
-        "hair_color": (40, 30, 20),  # Dark brown
-        "hair_style": "short",  # short, long, bald, mohawk
-        "glove_color": (30, 30, 30),  # Black tactical gloves
-        "boot_color": (40, 35, 30),  # Dark brown boots
-        "accessory": None,  # helmet, glasses, bandana, etc.
-        "description": "Standard soldier - ready for battle"
+        "skin_color": (120, 120, 130),  # Metallic chrome
+        "shirt_color": (20, 20, 25),  # Black leather
+        "pants_color": (15, 15, 20),  # Black leather
+        "hair_color": (30, 30, 35),  # Dark
+        "hair_style": "short",
+        "glove_color": (80, 80, 90),  # Metal hands
+        "boot_color": (25, 25, 30),  # Black boots
+        "accessory": "terminator",  # Special terminator look
+        "eye_color": (255, 0, 0),  # Red glowing eyes
+        "description": "I'll be back"
     },
     "commando": {
         "name": "Commando",
@@ -751,51 +752,69 @@ class Avatar:
         pygame.draw.ellipse(screen, skin_light,
                            (int(head_x - hr//2), int(head_y - hr), hr, hr//2 + 2))
 
-        # Draw facial features - BIGGER EYES that look toward aim
-        eye_offset_x = math.cos(aim_angle) * 3  # Eyes look toward aim
-        eye_offset_y = math.sin(aim_angle) * 2
+        # Check if this is a terminator-style avatar
+        is_terminator = config.get("accessory") == "terminator"
+        eye_color = config.get("eye_color", (70, 50, 30))
 
-        # Eye spacing based on head size
+        # Draw facial features - eyes look toward aim
+        eye_offset_x = math.cos(aim_angle) * 3
+        eye_offset_y = math.sin(aim_angle) * 2
         eye_spacing = 4
 
-        # Left eye - bigger and more visible
+        # Left eye
         eye_lx = head_x - eye_spacing
         eye_ly = head_y + 1
-        # Eye socket shadow
-        pygame.draw.ellipse(screen, skin_dark,
-                           (int(eye_lx - 4), int(eye_ly - 3), 8, 6))
-        # Eye white (sclera)
-        pygame.draw.ellipse(screen, (255, 255, 255),
-                           (int(eye_lx - 3), int(eye_ly - 2), 7, 5))
-        # Iris (colored part)
-        iris_x = eye_lx + eye_offset_x * 0.3
-        iris_y = eye_ly + eye_offset_y * 0.3
-        pygame.draw.circle(screen, (70, 50, 30), (int(iris_x), int(iris_y)), 2)
-        # Pupil (black center)
-        pygame.draw.circle(screen, (10, 10, 10), (int(iris_x), int(iris_y)), 1)
-        # Eye shine/reflection
-        pygame.draw.circle(screen, (255, 255, 255), (int(iris_x - 1), int(iris_y - 1)), 1)
 
-        # Right eye - bigger and more visible
+        if is_terminator:
+            # TERMINATOR EYES - glowing red
+            # Dark metal socket
+            pygame.draw.ellipse(screen, (30, 30, 35),
+                               (int(eye_lx - 4), int(eye_ly - 3), 8, 6))
+            # Red glow outer
+            pygame.draw.circle(screen, (150, 0, 0), (int(eye_lx), int(eye_ly)), 4)
+            # Bright red center
+            pygame.draw.circle(screen, (255, 0, 0), (int(eye_lx), int(eye_ly)), 3)
+            # White hot center
+            pygame.draw.circle(screen, (255, 100, 100), (int(eye_lx), int(eye_ly)), 1)
+        else:
+            # Normal human eyes
+            pygame.draw.ellipse(screen, skin_dark,
+                               (int(eye_lx - 4), int(eye_ly - 3), 8, 6))
+            pygame.draw.ellipse(screen, (255, 255, 255),
+                               (int(eye_lx - 3), int(eye_ly - 2), 7, 5))
+            iris_x = eye_lx + eye_offset_x * 0.3
+            iris_y = eye_ly + eye_offset_y * 0.3
+            pygame.draw.circle(screen, eye_color, (int(iris_x), int(iris_y)), 2)
+            pygame.draw.circle(screen, (10, 10, 10), (int(iris_x), int(iris_y)), 1)
+            pygame.draw.circle(screen, (255, 255, 255), (int(iris_x - 1), int(iris_y - 1)), 1)
+
+        # Right eye
         eye_rx = head_x + eye_spacing
         eye_ry = head_y + 1
-        # Eye socket shadow
-        pygame.draw.ellipse(screen, skin_dark,
-                           (int(eye_rx - 4), int(eye_ry - 3), 8, 6))
-        # Eye white (sclera)
-        pygame.draw.ellipse(screen, (255, 255, 255),
-                           (int(eye_rx - 3), int(eye_ry - 2), 7, 5))
-        # Iris (colored part)
-        iris_rx = eye_rx + eye_offset_x * 0.3
-        iris_ry = eye_ry + eye_offset_y * 0.3
-        pygame.draw.circle(screen, (70, 50, 30), (int(iris_rx), int(iris_ry)), 2)
-        # Pupil (black center)
-        pygame.draw.circle(screen, (10, 10, 10), (int(iris_rx), int(iris_ry)), 1)
-        # Eye shine/reflection
-        pygame.draw.circle(screen, (255, 255, 255), (int(iris_rx - 1), int(iris_ry - 1)), 1)
 
-        # Draw eyebrows - thicker and more visible
-        brow_color = tuple(max(0, c - 40) for c in config["hair_color"])
+        if is_terminator:
+            # TERMINATOR EYES - glowing red
+            pygame.draw.ellipse(screen, (30, 30, 35),
+                               (int(eye_rx - 4), int(eye_ry - 3), 8, 6))
+            pygame.draw.circle(screen, (150, 0, 0), (int(eye_rx), int(eye_ry)), 4)
+            pygame.draw.circle(screen, (255, 0, 0), (int(eye_rx), int(eye_ry)), 3)
+            pygame.draw.circle(screen, (255, 100, 100), (int(eye_rx), int(eye_ry)), 1)
+        else:
+            pygame.draw.ellipse(screen, skin_dark,
+                               (int(eye_rx - 4), int(eye_ry - 3), 8, 6))
+            pygame.draw.ellipse(screen, (255, 255, 255),
+                               (int(eye_rx - 3), int(eye_ry - 2), 7, 5))
+            iris_rx = eye_rx + eye_offset_x * 0.3
+            iris_ry = eye_ry + eye_offset_y * 0.3
+            pygame.draw.circle(screen, eye_color, (int(iris_rx), int(iris_ry)), 2)
+            pygame.draw.circle(screen, (10, 10, 10), (int(iris_rx), int(iris_ry)), 1)
+            pygame.draw.circle(screen, (255, 255, 255), (int(iris_rx - 1), int(iris_ry - 1)), 1)
+
+        # Draw eyebrows (metallic for terminator)
+        if is_terminator:
+            brow_color = (60, 60, 70)  # Metal brow ridge
+        else:
+            brow_color = tuple(max(0, c - 40) for c in config["hair_color"])
         pygame.draw.line(screen, brow_color,
                         (int(eye_lx - 4), int(eye_ly - 5)),
                         (int(eye_lx + 3), int(eye_ly - 4)), 2)
@@ -803,13 +822,16 @@ class Avatar:
                         (int(eye_rx - 3), int(eye_ry - 4)),
                         (int(eye_rx + 4), int(eye_ry - 5)), 2)
 
-        # Draw nose (more visible)
+        # Draw nose
         nose_y = head_y + 4
         pygame.draw.ellipse(screen, skin_dark,
                            (int(head_x - 2), int(nose_y - 1), 4, 3))
 
-        # Draw ears - larger
-        ear_color = tuple(max(0, c - 15) for c in skin)
+        # Draw ears (metallic sensors for terminator)
+        if is_terminator:
+            ear_color = (60, 60, 70)
+        else:
+            ear_color = tuple(max(0, c - 15) for c in skin)
         pygame.draw.ellipse(screen, ear_color,
                            (int(head_x - hr - 2), int(head_y - 1), 5, 7))
         pygame.draw.ellipse(screen, ear_color,
