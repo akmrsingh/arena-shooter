@@ -906,13 +906,12 @@ class Avatar:
             pygame.draw.ellipse(screen, (20, 20, 25),
                               (int(head_x - 7), int(head_y), 14, 8))
         elif accessory == "visor":
-            # Glowing cyber visor
+            # Glowing cyber visor (simplified - no surface for performance)
             pygame.draw.rect(screen, (80, 180, 255),
                            (int(head_x - 8), int(head_y - 2), 16, 5), border_radius=2)
-            # Glow effect
-            glow = pygame.Surface((20, 9), pygame.SRCALPHA)
-            pygame.draw.rect(glow, (100, 200, 255, 80), (0, 0, 20, 9), border_radius=3)
-            screen.blit(glow, (int(head_x - 10), int(head_y - 4)))
+            # Simple glow border instead of surface
+            pygame.draw.rect(screen, (100, 200, 255),
+                           (int(head_x - 9), int(head_y - 3), 18, 7), 1, border_radius=3)
         elif accessory == "goggles":
             # Snow/tactical goggles
             pygame.draw.ellipse(screen, (50, 50, 60),
@@ -930,15 +929,13 @@ class Avatar:
                            (int(cigar_x + 10), int(cigar_y - 2)), 3)
             # Glowing tip
             pygame.draw.circle(screen, (255, 150, 50), (int(cigar_x + 10), int(cigar_y - 2)), 2)
-            # Smoke puffs
+            # Smoke puffs (simplified - no surfaces for performance)
             if anim_timer % 30 < 15:
+                gray_shades = [(200, 200, 200), (180, 180, 180), (160, 160, 160)]
                 for i in range(3):
                     smoke_x = cigar_x + 12 + i * 4
                     smoke_y = cigar_y - 4 - i * 3
-                    alpha = 150 - i * 40
-                    smoke_surf = pygame.Surface((6, 6), pygame.SRCALPHA)
-                    pygame.draw.circle(smoke_surf, (200, 200, 200, alpha), (3, 3), 3 - i)
-                    screen.blit(smoke_surf, (int(smoke_x - 3), int(smoke_y - 3)))
+                    pygame.draw.circle(screen, gray_shades[i], (int(smoke_x), int(smoke_y)), 3 - i)
 
     def _draw_torso(self, screen, x, y, angle):
         """Draw the torso - optimized for web (no surface/rotation)"""
@@ -1301,6 +1298,12 @@ class Avatar:
 
 class VirtualJoystick:
     """Virtual joystick for mobile touch controls"""
+    # Class-level cached surfaces (created once, shared by all instances)
+    _base_surf = None
+    _knob_surf = None
+    _cached_radius = None
+    _cached_knob_radius = None
+
     def __init__(self, x, y, radius=60):
         self.base_x = x
         self.base_y = y
@@ -1358,20 +1361,30 @@ class VirtualJoystick:
         self.dy = dy / self.radius
 
     def draw(self, screen):
-        # Draw base circle (semi-transparent)
-        base_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(base_surf, (100, 100, 100, 100), (self.radius, self.radius), self.radius)
-        pygame.draw.circle(base_surf, (150, 150, 150, 150), (self.radius, self.radius), self.radius, 3)
-        screen.blit(base_surf, (self.base_x - self.radius, self.base_y - self.radius))
+        # Create cached surfaces once (lazy initialization)
+        if VirtualJoystick._base_surf is None or VirtualJoystick._cached_radius != self.radius:
+            VirtualJoystick._cached_radius = self.radius
+            VirtualJoystick._base_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(VirtualJoystick._base_surf, (100, 100, 100, 100), (self.radius, self.radius), self.radius)
+            pygame.draw.circle(VirtualJoystick._base_surf, (150, 150, 150, 150), (self.radius, self.radius), self.radius, 3)
 
-        # Draw knob
-        knob_surf = pygame.Surface((self.knob_radius * 2, self.knob_radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(knob_surf, (200, 200, 200, 180), (self.knob_radius, self.knob_radius), self.knob_radius)
-        screen.blit(knob_surf, (self.knob_x - self.knob_radius, self.knob_y - self.knob_radius))
+        if VirtualJoystick._knob_surf is None or VirtualJoystick._cached_knob_radius != self.knob_radius:
+            VirtualJoystick._cached_knob_radius = self.knob_radius
+            VirtualJoystick._knob_surf = pygame.Surface((self.knob_radius * 2, self.knob_radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(VirtualJoystick._knob_surf, (200, 200, 200, 180), (self.knob_radius, self.knob_radius), self.knob_radius)
+
+        # Draw base circle (using cached surface)
+        screen.blit(VirtualJoystick._base_surf, (self.base_x - self.radius, self.base_y - self.radius))
+
+        # Draw knob (using cached surface)
+        screen.blit(VirtualJoystick._knob_surf, (self.knob_x - self.knob_radius, self.knob_y - self.knob_radius))
 
 
 class TouchButton:
     """Touch button for mobile controls"""
+    # Class-level font cache
+    _cached_font = None
+
     def __init__(self, x, y, radius, label, color=(100, 100, 200)):
         self.x = x
         self.y = y
@@ -1380,11 +1393,16 @@ class TouchButton:
         self.color = color
         self.pressed = False
         self.touch_id = None
+        # Instance-level cached surfaces and text
+        self._normal_surf = None
+        self._pressed_surf = None
+        self._text_surf = None
 
     def contains_point(self, x, y):
         """Check if a point is within the button touch area"""
-        dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
-        return dist < self.radius
+        dx = x - self.x
+        dy = y - self.y
+        return (dx * dx + dy * dy) < (self.radius * self.radius)
 
     def handle_touch_down(self, x, y, touch_id):
         if self.contains_point(x, y):
@@ -1400,19 +1418,36 @@ class TouchButton:
             return True
         return False
 
-    def draw(self, screen):
-        # Draw button (semi-transparent)
-        btn_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        color = (self.color[0], self.color[1], self.color[2], 180 if self.pressed else 120)
-        pygame.draw.circle(btn_surf, color, (self.radius, self.radius), self.radius)
-        border_color = (255, 255, 255, 200) if self.pressed else (200, 200, 200, 150)
-        pygame.draw.circle(btn_surf, border_color, (self.radius, self.radius), self.radius, 3)
-        screen.blit(btn_surf, (self.x - self.radius, self.y - self.radius))
+    def _create_cached_surfaces(self):
+        """Create cached surfaces once"""
+        if self._normal_surf is None:
+            # Normal state surface
+            self._normal_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            color = (self.color[0], self.color[1], self.color[2], 120)
+            pygame.draw.circle(self._normal_surf, color, (self.radius, self.radius), self.radius)
+            pygame.draw.circle(self._normal_surf, (200, 200, 200, 150), (self.radius, self.radius), self.radius, 3)
 
-        # Draw label
-        font = pygame.font.Font(None, 24)
-        text = font.render(self.label, True, (255, 255, 255))
-        screen.blit(text, (self.x - text.get_width() // 2, self.y - text.get_height() // 2))
+            # Pressed state surface
+            self._pressed_surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            color = (self.color[0], self.color[1], self.color[2], 180)
+            pygame.draw.circle(self._pressed_surf, color, (self.radius, self.radius), self.radius)
+            pygame.draw.circle(self._pressed_surf, (255, 255, 255, 200), (self.radius, self.radius), self.radius, 3)
+
+            # Cached font and text
+            if TouchButton._cached_font is None:
+                TouchButton._cached_font = pygame.font.Font(None, 24)
+            self._text_surf = TouchButton._cached_font.render(self.label, True, (255, 255, 255))
+
+    def draw(self, screen):
+        # Create cached surfaces on first draw
+        self._create_cached_surfaces()
+
+        # Draw appropriate surface based on state
+        surf = self._pressed_surf if self.pressed else self._normal_surf
+        screen.blit(surf, (self.x - self.radius, self.y - self.radius))
+
+        # Draw label (cached)
+        screen.blit(self._text_surf, (self.x - self._text_surf.get_width() // 2, self.y - self._text_surf.get_height() // 2))
 
 
 class Camera:
@@ -2084,6 +2119,10 @@ class Explosion:
 
 class HealingEffect:
     """Visual effect when using a medkit"""
+    # Class-level cached font and text
+    _cached_font = None
+    _cached_text = None
+
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -2171,12 +2210,18 @@ class HealingEffect:
         # Draw health restore text floating up
         if self.lifetime > 40:
             text_y_offset = (self.max_lifetime - self.lifetime) * 0.5
-            font = pygame.font.Font(None, 28)
-            heal_text = font.render("+HEAL", True, (100, 255, 150))
-            screen.blit(heal_text, (sx - heal_text.get_width()//2, sy - 50 - text_y_offset))
+            # Use cached font and text
+            if HealingEffect._cached_font is None:
+                HealingEffect._cached_font = pygame.font.Font(None, 28)
+                HealingEffect._cached_text = HealingEffect._cached_font.render("+HEAL", True, (100, 255, 150))
+            screen.blit(HealingEffect._cached_text, (sx - HealingEffect._cached_text.get_width()//2, sy - 50 - text_y_offset))
 
 
 class Robot:
+    # Class-level cached fonts for boss health bar
+    _boss_font = None
+    _boss_text = None
+
     def __init__(self, x, y, difficulty, knife_only=False, bot_type="gun"):
         self.x = x
         self.y = y
@@ -2643,10 +2688,11 @@ class Boss:
             pygame.draw.rect(screen, (150, 0, 150), (bar_x, bar_y, health_width, bar_height))
             pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
 
-            # Boss name
-            font = pygame.font.Font(None, 36)
-            boss_text = font.render("BOSS", True, (150, 0, 150))
-            screen.blit(boss_text, (SCREEN_WIDTH // 2 - boss_text.get_width() // 2, 25))
+            # Boss name (cached for performance)
+            if Robot._boss_font is None:
+                Robot._boss_font = pygame.font.Font(None, 36)
+                Robot._boss_text = Robot._boss_font.render("BOSS", True, (150, 0, 150))
+            screen.blit(Robot._boss_text, (SCREEN_WIDTH // 2 - Robot._boss_text.get_width() // 2, 25))
 
 
 class Obstacle:
@@ -6578,7 +6624,10 @@ class Game:
 
     def draw_player_names(self, surface, camera):
         """Draw player names above players in online multiplayer"""
-        name_font = pygame.font.SysFont('Arial', 16, bold=True)
+        # Use cached font for performance
+        if not hasattr(self, '_name_font'):
+            self._name_font = pygame.font.Font(None, 20)
+        name_font = self._name_font
 
         def draw_name_label(player, text, color):
             if player and player.health > 0:
