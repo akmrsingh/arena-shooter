@@ -3145,19 +3145,9 @@ class Player:
         return self.weapon["max_ammo"]
 
     def switch_weapon(self):
-        # Add cooldown to prevent rapid switching which can cause stutters
-        if not hasattr(self, '_switch_cooldown'):
-            self._switch_cooldown = 0
-        if self._switch_cooldown > 0:
-            return  # Still on cooldown
-        self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
-        self.fire_cooldown = 15  # Small delay when switching
-        self._switch_cooldown = 10  # 10 frames cooldown before next switch
-
-    def update_switch_cooldown(self):
-        """Update weapon switch cooldown - call this each frame"""
-        if hasattr(self, '_switch_cooldown') and self._switch_cooldown > 0:
-            self._switch_cooldown -= 1
+        # SIMPLE weapon switch - deferred to update() to avoid event loop issues
+        # Just set a flag, actual switch happens in update()
+        self._want_switch = True
 
     def unlock_shotgun(self):
         if not self.has_shotgun and self.coins >= 10:
@@ -3498,6 +3488,13 @@ class Player:
             self.minigun_rotation += 0.5  # Spin fast when firing
         elif weapon["name"] == "Minigun":
             self.minigun_rotation += 0.1  # Slow spin when idle
+
+        # Handle deferred weapon switch (avoids event loop blocking)
+        if getattr(self, '_want_switch', False):
+            self._want_switch = False
+            if len(self.weapons) > 1:
+                self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
+                self.fire_cooldown = 15
 
     def shoot(self):
         if self.fire_cooldown > 0:
@@ -4556,6 +4553,13 @@ class Player2(Player):
             self.fire_cooldown -= 1
         if self.hit_flash > 0:
             self.hit_flash -= 1
+
+        # Handle deferred weapon switch (avoids event loop blocking)
+        if getattr(self, '_want_switch', False):
+            self._want_switch = False
+            if len(self.weapons) > 1:
+                self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
+                self.fire_cooldown = 15
 
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
