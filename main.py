@@ -643,18 +643,18 @@ class Avatar:
         self.avatar_type = avatar_type
         self.config = AVATAR_TYPES.get(avatar_type, AVATAR_TYPES["default"])
 
-        # Body part sizes - realistic proportions (bigger body, smaller head)
-        self.head_radius = 7  # Smaller head
-        self.neck_length = 4
-        self.torso_width = 24  # Much wider torso
-        self.torso_height = 22  # Taller torso
-        self.shoulder_width = 28  # Broad shoulders
-        self.arm_length = 20  # Longer arms
-        self.arm_width = 7
-        self.hand_radius = 5
-        self.leg_length = 18  # Longer legs
-        self.leg_width = 8
-        self.foot_length = 9
+        # Body part sizes - larger character for better visibility
+        self.head_radius = 10  # Visible head
+        self.neck_length = 5
+        self.torso_width = 32  # Wide torso
+        self.torso_height = 30  # Tall torso
+        self.shoulder_width = 38  # Broad shoulders
+        self.arm_length = 26  # Long arms
+        self.arm_width = 9
+        self.hand_radius = 6
+        self.leg_length = 24  # Long legs
+        self.leg_width = 10
+        self.foot_length = 12
 
         # Animation state
         self.walk_cycle = 0  # 0-1 for walk animation
