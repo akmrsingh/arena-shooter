@@ -5544,12 +5544,9 @@ class Game:
                                 self.login_message = msg
                                 pygame.key.stop_text_input()
                                 self.state = "menu"
-                            elif msg == "Checking cloud...":
-                                # Try cloud login
-                                self.login_message = "Checking cloud account..."
-                                self.start_cloud_login(self.username_input, self.passcode_input)
                             else:
-                                self.login_message = msg
+                                # Show error, don't try cloud (causes freeze)
+                                self.login_message = msg if msg != "Checking cloud..." else "User not found"
                     elif event.key == pygame.K_ESCAPE:
                         # Play as guest (skip login)
                         pygame.key.stop_text_input()
