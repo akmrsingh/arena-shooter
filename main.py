@@ -5643,10 +5643,10 @@ class Game:
                         # Start reload animation (don't instant reload)
                         if not self.player.reloading:
                             self.player.start_reload()
-                    elif event.key == pygame.K_q or event.key == pygame.K_e:
-                        # DISABLED - Q/E weapon switch causes freeze
-                        # Use number keys 1-5 to select weapons directly instead
-                        pass
+                    elif event.key == pygame.K_q:
+                        # Q to switch to next weapon
+                        if self.player and len(self.player.weapons) > 1:
+                            self.player.current_weapon = (self.player.current_weapon + 1) % len(self.player.weapons)
                     elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
                                        pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9):
                         # Direct weapon selection with number keys
@@ -6914,7 +6914,7 @@ class Game:
         self.screen.blit(reload_text, (20 + weapon_text.get_width() + 10, 60))
 
         # Switch weapon hint
-        switch_text = self._cached_text("switch", "[1-9] Weapons", self.small_font, GRAY)
+        switch_text = self._cached_text("switch", "[Q] Switch", self.small_font, GRAY)
         self.screen.blit(switch_text, (20, 95))
 
         # Coins display (top right corner)
