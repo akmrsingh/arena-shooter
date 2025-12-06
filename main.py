@@ -1450,6 +1450,23 @@ class TouchButton:
         screen.blit(self._text_surf, (self.x - self._text_surf.get_width() // 2, self.y - self._text_surf.get_height() // 2))
 
 
+class FakeKeys:
+    """Fake keys class for mobile joystick - defined once at module level for performance"""
+    def __init__(self, dx, dy):
+        self.dx = dx
+        self.dy = dy
+    def __getitem__(self, key):
+        if key == pygame.K_w or key == pygame.K_UP:
+            return self.dy < -0.3
+        if key == pygame.K_s or key == pygame.K_DOWN:
+            return self.dy > 0.3
+        if key == pygame.K_a or key == pygame.K_LEFT:
+            return self.dx < -0.3
+        if key == pygame.K_d or key == pygame.K_RIGHT:
+            return self.dx > 0.3
+        return False
+
+
 class Camera:
     def __init__(self, view_width=SCREEN_WIDTH, view_height=SCREEN_HEIGHT):
         self.x = 0
@@ -6158,21 +6175,7 @@ class Game:
 
         # Handle mobile joystick movement
         if self.mobile_controls and self.joystick.active:
-            # Create fake keys dict based on joystick
-            class FakeKeys:
-                def __init__(self, dx, dy):
-                    self.dx = dx
-                    self.dy = dy
-                def __getitem__(self, key):
-                    if key == pygame.K_w or key == pygame.K_UP:
-                        return self.dy < -0.3
-                    if key == pygame.K_s or key == pygame.K_DOWN:
-                        return self.dy > 0.3
-                    if key == pygame.K_a or key == pygame.K_LEFT:
-                        return self.dx < -0.3
-                    if key == pygame.K_d or key == pygame.K_RIGHT:
-                        return self.dx > 0.3
-                    return False
+            # Use module-level FakeKeys class (faster than defining class inside function)
             keys = FakeKeys(self.joystick.dx, self.joystick.dy)
 
         # Handle mobile aim joystick
@@ -6701,12 +6704,18 @@ class Game:
         # Use cached font for performance
         if not hasattr(self, '_name_font'):
             self._name_font = pygame.font.Font(None, 20)
+            # Pre-cache common labels
+            self._name_cache = {}
         name_font = self._name_font
 
         def draw_name_label(player, text, color):
             if player and player.health > 0:
                 sx, sy = camera.apply(player.x, player.y)
-                name_surface = name_font.render(text, True, color)
+                # Use cached surface for common labels
+                cache_key = (text, color)
+                if cache_key not in self._name_cache:
+                    self._name_cache[cache_key] = name_font.render(text, True, color)
+                name_surface = self._name_cache[cache_key]
                 name_x = sx - name_surface.get_width() // 2
                 name_y = sy - player.radius - 30
                 bg_rect = pygame.Rect(name_x - 4, name_y - 2, name_surface.get_width() + 8, name_surface.get_height() + 4)
