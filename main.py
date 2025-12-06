@@ -670,22 +670,28 @@ class Avatar:
             # Smoothly return to neutral
             self.walk_cycle *= 0.9
 
-        # Calculate body facing direction (torso rotates toward aim)
-        body_angle = angle
+        # Body stays upright (facing down on screen = angle 0)
+        # Only arms rotate to aim
+        body_angle = 0  # Body always faces "down" on screen (top-down view)
+        aim_angle = angle  # Arms aim toward mouse
+
+        # Determine which side the character is aiming (for flipping)
+        aiming_right = -math.pi/2 < aim_angle < math.pi/2
 
         # Draw layers from back to front
         # 1. Back leg
         self._draw_leg(screen, x, y, body_angle, is_back=True)
 
-        # 2. Back arm (not holding weapon)
-        self._draw_arm(screen, x, y, body_angle, is_front=False, is_reloading=is_reloading,
+        # 2. Back arm (support hand for weapon)
+        self._draw_arm(screen, x, y, aim_angle, is_front=False, is_reloading=is_reloading,
                       reload_phase=reload_phase, weapon_name=weapon_name, anim_timer=anim_timer)
 
         # 3. Torso
         self._draw_torso(screen, x, y, body_angle)
 
-        # 4. Head
-        self._draw_head(screen, x, y, body_angle, anim_timer)
+        # 4. Head (slightly turns toward aim direction)
+        head_turn = aim_angle * 0.15  # Head turns slightly toward aim
+        self._draw_head(screen, x, y, head_turn, anim_timer)
 
         # 5. Front leg
         self._draw_leg(screen, x, y, body_angle, is_back=False)
