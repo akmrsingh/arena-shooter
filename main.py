@@ -1079,16 +1079,28 @@ class Avatar:
                 hand_x = elbow_x + math.cos(arm_angle) * (self.arm_length * 0.6)
                 hand_y = elbow_y + math.sin(arm_angle) * (self.arm_length * 0.6)
         else:
-            # Back arm for support or idle
-            arm_angle = angle + 0.5
-            elbow_x = shoulder_x + math.cos(arm_angle) * (self.arm_length * 0.4)
-            elbow_y = shoulder_y + math.sin(arm_angle) * (self.arm_length * 0.4)
+            # Back arm - for one-handed weapons, arm hangs at side naturally
+            one_handed = weapon_name in ["Handgun", "Knife", "Grenade", "Smoke Grenade"]
 
-            if is_reloading:
+            if one_handed and not is_reloading:
+                # Arm hangs at side/slightly back - natural idle pose
+                idle_angle = angle + math.pi * 0.7  # Point backward/down
+                elbow_x = shoulder_x + math.cos(idle_angle) * (self.arm_length * 0.4)
+                elbow_y = shoulder_y + math.sin(idle_angle) * (self.arm_length * 0.4)
+                hand_x = elbow_x + math.cos(idle_angle + 0.3) * (self.arm_length * 0.5)
+                hand_y = elbow_y + math.sin(idle_angle + 0.3) * (self.arm_length * 0.5)
+            elif is_reloading:
                 # Support hand moves during reload
+                arm_angle = angle + 0.5
+                elbow_x = shoulder_x + math.cos(arm_angle) * (self.arm_length * 0.4)
+                elbow_y = shoulder_y + math.sin(arm_angle) * (self.arm_length * 0.4)
                 hand_pos = self._get_support_hand_position(reload_phase, weapon_name, x, y, angle)
                 hand_x, hand_y = hand_pos
             else:
+                # Two-handed weapons - support arm helps hold weapon
+                arm_angle = angle + 0.5
+                elbow_x = shoulder_x + math.cos(arm_angle) * (self.arm_length * 0.4)
+                elbow_y = shoulder_y + math.sin(arm_angle) * (self.arm_length * 0.4)
                 hand_x = elbow_x + math.cos(arm_angle - 0.2) * (self.arm_length * 0.5)
                 hand_y = elbow_y + math.sin(arm_angle - 0.2) * (self.arm_length * 0.5)
 
@@ -1249,18 +1261,11 @@ class Avatar:
             self._draw_fingers(screen, front_x, front_y, angle, config["glove_color"])
 
         elif weapon_name == "Handgun":
-            # One hand main, one support
+            # Single hand grip for handgun
             main_x = x + math.cos(angle) * 10
             main_y = y + math.sin(angle) * 10
-
-            support_x = main_x + math.cos(angle + math.pi/2) * 3
-            support_y = main_y + math.sin(angle + math.pi/2) * 3
-
-            if is_reloading:
-                support_x, support_y = self._get_support_hand_position(reload_phase, weapon_name, x, y, angle)
-
             pygame.draw.circle(screen, config["glove_color"], (int(main_x), int(main_y)), self.hand_radius)
-            pygame.draw.circle(screen, config["glove_color"], (int(support_x), int(support_y)), self.hand_radius - 1)
+            self._draw_fingers(screen, main_x, main_y, angle, config["glove_color"])
 
         elif weapon_name == "Dual Pistols":
             # Both hands extended
@@ -1282,8 +1287,22 @@ class Avatar:
             pygame.draw.circle(screen, config["glove_color"], (int(shoulder_x), int(shoulder_y)), self.hand_radius)
             pygame.draw.circle(screen, config["glove_color"], (int(grip_x), int(grip_y)), self.hand_radius)
 
+        elif weapon_name == "Knife":
+            # Single hand grip for knife
+            hand_x = x + math.cos(angle) * 10
+            hand_y = y + math.sin(angle) * 10
+            pygame.draw.circle(screen, config["glove_color"], (int(hand_x), int(hand_y)), self.hand_radius)
+            self._draw_fingers(screen, hand_x, hand_y, angle, config["glove_color"])
+
+        elif weapon_name in ["Grenade", "Smoke Grenade"]:
+            # Single hand for throwing grenades
+            hand_x = x + math.cos(angle) * 8
+            hand_y = y + math.sin(angle) * 8
+            pygame.draw.circle(screen, config["glove_color"], (int(hand_x), int(hand_y)), self.hand_radius)
+            self._draw_fingers(screen, hand_x, hand_y, angle, config["glove_color"])
+
         else:
-            # Default single hand
+            # Default single hand for other weapons
             hand_x = x + math.cos(angle) * 12
             hand_y = y + math.sin(angle) * 12
             pygame.draw.circle(screen, config["glove_color"], (int(hand_x), int(hand_y)), self.hand_radius)
