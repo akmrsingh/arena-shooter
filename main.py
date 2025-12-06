@@ -5639,8 +5639,10 @@ class Game:
                         # Start reload animation (don't instant reload)
                         if not self.player.reloading:
                             self.player.start_reload()
-                    elif event.key == pygame.K_q:
-                        self.player.switch_weapon()
+                    elif event.key == pygame.K_q or event.key == pygame.K_e:
+                        # Q or E to switch weapon (with safety check)
+                        if self.player and len(self.player.weapons) > 1:
+                            self.player.switch_weapon()
                     elif event.key == pygame.K_RETURN:
                         # Knife attack with Enter key
                         if self.player.weapon.get("melee", False):
@@ -6901,7 +6903,7 @@ class Game:
         self.screen.blit(reload_text, (20 + weapon_text.get_width() + 10, 60))
 
         # Switch weapon hint
-        switch_text = self._cached_text("switch", "[Q] Switch", self.small_font, GRAY)
+        switch_text = self._cached_text("switch", "[Q/E] Switch", self.small_font, GRAY)
         self.screen.blit(switch_text, (20, 95))
 
         # Coins display (top right corner)
