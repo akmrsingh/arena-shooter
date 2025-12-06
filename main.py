@@ -4608,6 +4608,19 @@ class Game:
         except Exception as e:
             pass  # Status check failed, will retry next frame
 
+    def disconnect_online(self):
+        """Disconnect from online multiplayer"""
+        try:
+            import platform
+            window = platform.window
+            if hasattr(window, 'MP'):
+                window.MP.disconnect()
+        except:
+            pass
+        self.online_status = "disconnected"
+        self.online_room_code = ""
+        self.remote_player_name = ""
+
     def send_game_state(self):
         """Send local player state to remote player"""
         try:
@@ -4672,9 +4685,17 @@ class Game:
                         remote.angle = state.get("angle", remote.angle)
                         # Don't sync health directly, let damage happen locally
 
-                        # Get remote player name
+                        # Get remote player name and check for duplicate
                         if state.get("name"):
-                            self.remote_player_name = state.get("name")
+                            remote_name = state.get("name")
+                            # Check if remote player has same username as local player
+                            if remote_name.lower() == self.player_name.lower():
+                                # Duplicate account detected - kick back to menu
+                                self.online_message = "ERROR: Someone with same username already in game!"
+                                self.state = "online_menu"
+                                self.disconnect_online()
+                                return
+                            self.remote_player_name = remote_name
 
                         # Handle remote shooting
                         if state.get("shooting") and hasattr(remote, 'shoot'):
