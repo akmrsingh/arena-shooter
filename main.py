@@ -1979,15 +1979,15 @@ class SmokeCloud:
         self.particles = []
         self.expanding = True
 
-        # Create smoke particles
-        for _ in range(30):
+        # Create smoke particles - use fewer particles for performance
+        for _ in range(15):
             self.particles.append({
                 'offset_x': random.uniform(-50, 50),
                 'offset_y': random.uniform(-50, 50),
                 'size': random.randint(20, 40),
                 'drift_x': random.uniform(-0.3, 0.3),
                 'drift_y': random.uniform(-0.5, -0.1),  # Smoke rises
-                'alpha': random.randint(150, 200)
+                'gray': random.randint(140, 180)  # Pre-compute gray value
             })
 
     def update(self):
@@ -2022,17 +2022,17 @@ class SmokeCloud:
         # Calculate alpha based on lifetime
         alpha_mult = min(1.0, self.lifetime / 60) if self.lifetime < 60 else 1.0
 
-        # Draw smoke particles
+        # Draw smoke particles - use pre-computed gray values
+        scale = self.radius / self.max_radius
         for p in self.particles:
-            px = sx + p['offset_x'] * (self.radius / self.max_radius)
-            py = sy + p['offset_y'] * (self.radius / self.max_radius)
-            size = int(p['size'] * (self.radius / self.max_radius))
+            px = sx + p['offset_x'] * scale
+            py = sy + p['offset_y'] * scale
+            size = int(p['size'] * scale)
 
             if size > 0:
-                # Gray smoke with varying darkness
-                gray = random.randint(140, 180)
-                color = (gray, gray, gray)
-                pygame.draw.circle(screen, color, (int(px), int(py)), size)
+                # Use pre-computed gray value
+                gray = p['gray']
+                pygame.draw.circle(screen, (gray, gray, gray), (int(px), int(py)), size)
 
         # Draw outer boundary (faint)
         pygame.draw.circle(screen, (160, 160, 160), (int(sx), int(sy)), int(self.radius), 2)
@@ -7561,7 +7561,7 @@ class Game:
                 mini_avatar.draw(self.screen, mini_x, mini_y, 0, anim_timer=0)
 
                 # Show owned indicator
-                if mini_type in self.owned_avatars:
+                if mini_type in self.player.owned_avatars:
                     owned_dot = pygame.Surface((10, 10), pygame.SRCALPHA)
                     pygame.draw.circle(owned_dot, GREEN, (5, 5), 5)
                     self.screen.blit(owned_dot, (int(mini_x - 5), int(mini_y + 25)))
