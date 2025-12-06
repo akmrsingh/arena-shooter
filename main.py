@@ -686,10 +686,8 @@ class Avatar:
         # Determine which side the character is aiming (for flipping)
         aiming_right = -math.pi/2 < aim_angle < math.pi/2
 
-        # Draw larger shadow under character
-        shadow_surface = pygame.Surface((50, 24), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surface, (0, 0, 0, 50), (0, 0, 50, 24))
-        screen.blit(shadow_surface, (int(x - 25), int(y + 18)))
+        # Draw shadow under character - simple ellipse (no surface for performance)
+        pygame.draw.ellipse(screen, (30, 30, 30), (int(x - 25), int(y + 18), 50, 24))
 
         # Draw layers from back to front
         # 1. Back leg
@@ -728,39 +726,30 @@ class Avatar:
         pygame.draw.ellipse(screen, neck_light, (int(x - 3), int(y - 1), 6, 4))
 
     def _draw_head(self, screen, x, y, angle, aim_angle, anim_timer):
-        """Draw the head with realistic features and prominent eyes"""
+        """Draw the head with realistic features - optimized for web"""
         config = self.config
 
         # Head position (slight turn based on aim)
         head_x = x + math.sin(angle) * 2
         head_y = y
 
-        # Create head surface for proper layering
-        head_size = self.head_radius * 4  # Larger surface
-        head_surface = pygame.Surface((head_size, head_size), pygame.SRCALPHA)
-
-        # Base head shape with shadow gradient effect
+        # Base head shape - draw directly to screen (no surface creation)
         skin = config["skin_color"]
         skin_dark = tuple(max(0, c - 30) for c in skin)
         skin_light = tuple(min(255, c + 20) for c in skin)
-
-        # Draw head shadow (back of head) - proportional to head_radius
         hr = self.head_radius
-        pygame.draw.ellipse(head_surface, skin_dark,
-                           (head_size//2 - hr, head_size//2 - hr - 2, hr * 2, hr * 2 + 4))
+
+        # Draw head shadow (back of head)
+        pygame.draw.ellipse(screen, skin_dark,
+                           (int(head_x - hr), int(head_y - hr - 2), hr * 2, hr * 2 + 4))
 
         # Draw main head
-        pygame.draw.ellipse(head_surface, skin,
-                           (head_size//2 - hr + 1, head_size//2 - hr - 1, hr * 2 - 2, hr * 2 + 2))
+        pygame.draw.ellipse(screen, skin,
+                           (int(head_x - hr + 1), int(head_y - hr - 1), hr * 2 - 2, hr * 2 + 2))
 
         # Draw highlight on forehead
-        pygame.draw.ellipse(head_surface, skin_light,
-                           (head_size//2 - hr//2, head_size//2 - hr, hr, hr//2 + 2))
-
-        # Rotate head surface
-        rotated = pygame.transform.rotate(head_surface, -math.degrees(angle))
-        rect = rotated.get_rect(center=(int(head_x), int(head_y)))
-        screen.blit(rotated, rect)
+        pygame.draw.ellipse(screen, skin_light,
+                           (int(head_x - hr//2), int(head_y - hr), hr, hr//2 + 2))
 
         # Draw facial features - BIGGER EYES that look toward aim
         eye_offset_x = math.cos(aim_angle) * 3  # Eyes look toward aim
@@ -930,52 +919,32 @@ class Avatar:
                     screen.blit(smoke_surf, (int(smoke_x - 3), int(smoke_y - 3)))
 
     def _draw_torso(self, screen, x, y, angle):
-        """Draw the torso with realistic details"""
+        """Draw the torso - optimized for web (no surface/rotation)"""
         config = self.config
         shirt = config["shirt_color"]
         shirt_dark = tuple(max(0, c - 30) for c in shirt)
         shirt_light = tuple(min(255, c + 25) for c in shirt)
 
-        # Create torso surface
-        torso_w = self.torso_width + 8
-        torso_h = self.torso_height + 8
-        torso_surface = pygame.Surface((torso_w, torso_h), pygame.SRCALPHA)
+        tw = self.torso_width
+        th = self.torso_height
 
-        # Main torso shape (slightly tapered - wider at shoulders)
+        # Draw torso directly to screen (body stays upright in top-down view)
         # Shadow side
-        pygame.draw.ellipse(torso_surface, shirt_dark,
-                          (2, 3, self.torso_width, self.torso_height))
+        pygame.draw.ellipse(screen, shirt_dark,
+                          (int(x - tw//2), int(y - th//2), tw, th))
         # Main body
-        pygame.draw.ellipse(torso_surface, shirt,
-                          (3, 3, self.torso_width - 2, self.torso_height - 1))
+        pygame.draw.ellipse(screen, shirt,
+                          (int(x - tw//2 + 2), int(y - th//2 + 1), tw - 4, th - 2))
         # Highlight
-        pygame.draw.ellipse(torso_surface, shirt_light,
-                          (5, 4, self.torso_width - 6, self.torso_height // 3))
-
-        # Draw collar/neckline
-        collar_color = tuple(max(0, c - 20) for c in shirt)
-        pygame.draw.arc(torso_surface, collar_color,
-                       (torso_w//2 - 5, 2, 10, 8), 0, math.pi, 2)
-
-        # Draw pockets (for military look)
-        pocket_color = tuple(max(0, c - 15) for c in shirt)
-        pygame.draw.rect(torso_surface, pocket_color,
-                        (torso_w//2 - 6, torso_h//2 - 2, 4, 5), border_radius=1)
-        pygame.draw.rect(torso_surface, pocket_color,
-                        (torso_w//2 + 2, torso_h//2 - 2, 4, 5), border_radius=1)
+        pygame.draw.ellipse(screen, shirt_light,
+                          (int(x - tw//4), int(y - th//2 + 2), tw//2, th//3))
 
         # Draw belt at waist
-        belt_y = torso_h - 5
-        pygame.draw.rect(torso_surface, (50, 40, 30),
-                        (torso_w//2 - 7, belt_y, 14, 3))
+        pygame.draw.rect(screen, (50, 40, 30),
+                        (int(x - 7), int(y + th//2 - 5), 14, 3))
         # Belt buckle
-        pygame.draw.rect(torso_surface, (180, 160, 80),
-                        (torso_w//2 - 2, belt_y, 4, 3))
-
-        # Rotate and draw
-        rotated = pygame.transform.rotate(torso_surface, -math.degrees(angle) - 90)
-        rect = rotated.get_rect(center=(int(x), int(y)))
-        screen.blit(rotated, rect)
+        pygame.draw.rect(screen, (180, 160, 80),
+                        (int(x - 2), int(y + th//2 - 5), 4, 3))
 
     def _draw_leg(self, screen, x, y, angle, is_back=False):
         """Draw a leg with realistic walk animation"""
@@ -1080,7 +1049,7 @@ class Avatar:
                 hand_y = elbow_y + math.sin(arm_angle) * (self.arm_length * 0.6)
         else:
             # Back arm - for one-handed weapons, arm hangs at side naturally
-            one_handed = weapon_name in ["Handgun", "Knife", "Grenade", "Smoke Grenade"]
+            one_handed = weapon_name in ["Handgun", "Knife", "Grenade", "Smoke"]
 
             if one_handed and not is_reloading:
                 # Arm hangs at side/slightly back - natural idle pose
@@ -1294,7 +1263,7 @@ class Avatar:
             pygame.draw.circle(screen, config["glove_color"], (int(hand_x), int(hand_y)), self.hand_radius)
             self._draw_fingers(screen, hand_x, hand_y, angle, config["glove_color"])
 
-        elif weapon_name in ["Grenade", "Smoke Grenade"]:
+        elif weapon_name in ["Grenade", "Smoke"]:
             # Single hand for throwing grenades
             hand_x = x + math.cos(angle) * 8
             hand_y = y + math.sin(angle) * 8
