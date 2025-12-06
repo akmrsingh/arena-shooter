@@ -3128,8 +3128,19 @@ class Player:
         return self.weapon["max_ammo"]
 
     def switch_weapon(self):
+        # Add cooldown to prevent rapid switching which can cause stutters
+        if not hasattr(self, '_switch_cooldown'):
+            self._switch_cooldown = 0
+        if self._switch_cooldown > 0:
+            return  # Still on cooldown
         self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
         self.fire_cooldown = 15  # Small delay when switching
+        self._switch_cooldown = 10  # 10 frames cooldown before next switch
+
+    def update_switch_cooldown(self):
+        """Update weapon switch cooldown - call this each frame"""
+        if hasattr(self, '_switch_cooldown') and self._switch_cooldown > 0:
+            self._switch_cooldown -= 1
 
     def unlock_shotgun(self):
         if not self.has_shotgun and self.coins >= 10:
@@ -4596,10 +4607,11 @@ class Player2(Player):
             pygame.draw.rect(screen, (255, 150, 150), (bar_x, bar_y, progress_width, bar_height))
             pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
 
-        # Draw "P2" label above player
-        font = pygame.font.Font(None, 24)
-        label = font.render("P2", True, (255, 200, 200))
-        screen.blit(label, (sx - label.get_width()//2, sy - self.radius - 35))
+        # Draw "P2" label above player (use cached font and surface)
+        if not hasattr(Player2, '_p2_label_font'):
+            Player2._p2_label_font = pygame.font.Font(None, 24)
+            Player2._p2_label = Player2._p2_label_font.render("P2", True, (255, 200, 200))
+        screen.blit(Player2._p2_label, (sx - Player2._p2_label.get_width()//2, sy - self.radius - 35))
 
 
 class Game:
@@ -5137,6 +5149,8 @@ class Game:
     def start_game(self, difficulty):
         self.difficulty = difficulty
         self.reset_game()
+        # Pre-cache all weapon texts to avoid stutters when switching weapons
+        self._precache_weapon_texts()
         # In impossible mode, player gets 10000 health
         if difficulty == "impossible":
             self.player.health = 10000
@@ -5146,6 +5160,21 @@ class Game:
             self.spawn_robots()
         self.state = "playing"
         self.play_boss_music()
+
+    def _precache_weapon_texts(self):
+        """Pre-cache all weapon text renders to avoid stutters during gameplay"""
+        # The HUD uses the "weapon" cache key with (text, color) as the lookup key
+        # Pre-render the initial ammo for each weapon the player has
+        # This warms up pygame's font subsystem to prevent first-switch stutter
+        if self.player:
+            for weapon in self.player.weapons:
+                weapon_name = weapon["name"]
+                weapon_color = weapon["color"]
+                ammo = weapon["ammo"]
+                max_ammo = weapon["max_ammo"]
+                text = f"{weapon_name}: {ammo}/{max_ammo}"
+                # Force render to warm up the font cache
+                self.font.render(text, True, weapon_color)
 
     def handle_melee_attack(self, attack):
         """Handle knife melee attack - hit robots in close range"""
@@ -6168,6 +6197,7 @@ class Game:
         self.player.update(keys, mouse_pos, self.camera, self.obstacles)
         self.player.update_recoil()  # Update recoil recovery
         self.player.update_reload()  # Update reload animation
+        self.player.update_switch_cooldown()  # Update weapon switch cooldown
 
         # Update Player 2 (in multiplayer modes)
         # In online modes, player2 is controlled by network data, not local input
@@ -6187,6 +6217,7 @@ class Game:
             self.player2.update(keys, target_pos, self.camera, self.obstacles)
             self.player2.update_recoil()
             self.player2.update_reload()
+            self.player2.update_switch_cooldown()
 
         # Update camera(s)
         if self.split_screen:
