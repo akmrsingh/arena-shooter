@@ -5838,6 +5838,45 @@ class Game:
                         result = self.player.shoot()
                         if result:
                             self.bullets.append(result)
+                elif event.button == 1 and self.state == "online_menu":
+                    # Handle touch/click on online menu buttons
+                    mouse_pos = pygame.mouse.get_pos()
+                    # Mode selection buttons
+                    if hasattr(self, 'online_coop_btn') and self.online_coop_btn.collidepoint(mouse_pos):
+                        self.online_game_mode = "coop"
+                        self.online_message = "CO-OP mode selected"
+                    elif hasattr(self, 'online_pvp_btn') and self.online_pvp_btn.collidepoint(mouse_pos):
+                        self.online_game_mode = "pvp"
+                        self.online_message = "1v1 PVP mode selected"
+                    elif hasattr(self, 'online_2v2_btn') and self.online_2v2_btn.collidepoint(mouse_pos):
+                        self.online_game_mode = "2v2"
+                        self.online_message = "2v2 TEAM mode selected"
+                    elif hasattr(self, 'online_2v1_btn') and self.online_2v1_btn.collidepoint(mouse_pos):
+                        self.online_game_mode = "2v1"
+                        self.online_message = "2v1 mode selected"
+                    # Difficulty buttons
+                    elif hasattr(self, 'online_diff_left_btn') and self.online_diff_left_btn.collidepoint(mouse_pos):
+                        self.online_difficulty_index = (self.online_difficulty_index - 1) % len(self.online_difficulty_options)
+                        self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
+                        self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
+                    elif hasattr(self, 'online_diff_right_btn') and self.online_diff_right_btn.collidepoint(mouse_pos):
+                        self.online_difficulty_index = (self.online_difficulty_index + 1) % len(self.online_difficulty_options)
+                        self.online_difficulty = self.online_difficulty_options[self.online_difficulty_index]
+                        self.online_message = f"Difficulty: {self.online_difficulty.upper()}"
+                    # Host/Join buttons
+                    elif hasattr(self, 'online_host_btn') and self.online_host_btn.collidepoint(mouse_pos):
+                        mode_names = {"coop": "CO-OP", "pvp": "1v1 PVP", "2v2": "2v2 TEAM", "2v1": "2v1"}
+                        mode_name = mode_names.get(self.online_game_mode, "")
+                        self.online_message = f"Creating {mode_name} room..."
+                        self.is_host = True
+                        self.state = "waiting"
+                    elif hasattr(self, 'online_join_btn') and self.online_join_btn.collidepoint(mouse_pos):
+                        self.online_message = "Enter room code:"
+                        self.online_input_active = True
+                    # Back button
+                    elif hasattr(self, 'online_back_btn') and self.online_back_btn.collidepoint(mouse_pos):
+                        self.state = "menu"
+                        self.online_message = ""
 
         # Continuous shooting while mouse held (not for melee or grenade)
         # On mobile: only shoot if touching screen (not on joystick/buttons) OR shoot button pressed
@@ -7183,87 +7222,128 @@ class Game:
 
         # Title
         title = self.big_font.render("ONLINE MULTIPLAYER", True, (0, 200, 255))
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 60))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 40))
 
         # Box
         box_width = 550
-        box_height = 420
+        box_height = 480
         box_x = SCREEN_WIDTH // 2 - box_width // 2
-        box_y = 120
+        box_y = 100
 
         pygame.draw.rect(self.screen, (40, 40, 60), (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, (0, 200, 255), (box_x, box_y, box_width, box_height), 3)
 
-        # Game mode selection
+        # Game mode selection - with touch buttons
         mode_label = self.font.render("Game Mode:", True, WHITE)
-        self.screen.blit(mode_label, (box_x + 30, box_y + 20))
+        self.screen.blit(mode_label, (box_x + 30, box_y + 15))
 
-        # Row 1: Co-op, PvP
+        # Row 1: Co-op, PvP - as buttons
+        btn_w = 120
+        btn_h = 35
+
+        # CO-OP button
+        coop_rect = pygame.Rect(box_x + 30, box_y + 50, btn_w, btn_h)
         coop_color = GREEN if self.online_game_mode == "coop" else GRAY
-        coop_text = self.font.render("[1] CO-OP", True, coop_color)
-        self.screen.blit(coop_text, (box_x + 30, box_y + 50))
+        pygame.draw.rect(self.screen, (30, 30, 50), coop_rect)
+        pygame.draw.rect(self.screen, coop_color, coop_rect, 2)
+        coop_text = self.small_font.render("CO-OP", True, coop_color)
+        self.screen.blit(coop_text, (coop_rect.centerx - coop_text.get_width()//2, coop_rect.centery - coop_text.get_height()//2))
+        self.online_coop_btn = coop_rect
 
+        # PVP button
+        pvp_rect = pygame.Rect(box_x + 170, box_y + 50, btn_w, btn_h)
         pvp_color = RED if self.online_game_mode == "pvp" else GRAY
-        pvp_text = self.font.render("[2] PVP", True, pvp_color)
-        self.screen.blit(pvp_text, (box_x + 280, box_y + 50))
+        pygame.draw.rect(self.screen, (30, 30, 50), pvp_rect)
+        pygame.draw.rect(self.screen, pvp_color, pvp_rect, 2)
+        pvp_text = self.small_font.render("PVP", True, pvp_color)
+        self.screen.blit(pvp_text, (pvp_rect.centerx - pvp_text.get_width()//2, pvp_rect.centery - pvp_text.get_height()//2))
+        self.online_pvp_btn = pvp_rect
 
-        # Row 2: 2v2, 2v1
+        # 2v2 button
+        btn_2v2_rect = pygame.Rect(box_x + 310, box_y + 50, btn_w, btn_h)
         color_2v2 = (255, 200, 50) if self.online_game_mode == "2v2" else GRAY
-        text_2v2 = self.font.render("[3] 2v2", True, color_2v2)
-        self.screen.blit(text_2v2, (box_x + 30, box_y + 80))
+        pygame.draw.rect(self.screen, (30, 30, 50), btn_2v2_rect)
+        pygame.draw.rect(self.screen, color_2v2, btn_2v2_rect, 2)
+        text_2v2 = self.small_font.render("2v2", True, color_2v2)
+        self.screen.blit(text_2v2, (btn_2v2_rect.centerx - text_2v2.get_width()//2, btn_2v2_rect.centery - text_2v2.get_height()//2))
+        self.online_2v2_btn = btn_2v2_rect
 
+        # 2v1 button
+        btn_2v1_rect = pygame.Rect(box_x + 440, box_y + 50, btn_w - 20, btn_h)
         color_2v1 = (200, 100, 255) if self.online_game_mode == "2v1" else GRAY
-        text_2v1 = self.font.render("[4] 2v1", True, color_2v1)
-        self.screen.blit(text_2v1, (box_x + 280, box_y + 80))
+        pygame.draw.rect(self.screen, (30, 30, 50), btn_2v1_rect)
+        pygame.draw.rect(self.screen, color_2v1, btn_2v1_rect, 2)
+        text_2v1 = self.small_font.render("2v1", True, color_2v1)
+        self.screen.blit(text_2v1, (btn_2v1_rect.centerx - text_2v1.get_width()//2, btn_2v1_rect.centery - text_2v1.get_height()//2))
+        self.online_2v1_btn = btn_2v1_rect
 
-        # Separator
-        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 115), (box_x + box_width - 20, box_y + 115), 1)
+        # Separator after mode selection
+        pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 95), (box_x + box_width - 20, box_y + 95), 1)
 
         # Difficulty selection (for co-op and 2v2/2v1 modes)
         if self.online_game_mode in ["coop", "2v2", "2v1"]:
             diff_label = self.font.render("Difficulty:", True, WHITE)
-            self.screen.blit(diff_label, (box_x + 30, box_y + 125))
+            self.screen.blit(diff_label, (box_x + 30, box_y + 105))
 
             # Arrow buttons and difficulty display
-            left_arrow = self.font.render("<", True, YELLOW)
-            right_arrow = self.font.render(">", True, YELLOW)
             diff_name = self.online_difficulty.upper()
             diff_colors = {"easy": GREEN, "medium": YELLOW, "hard": ORANGE, "impossible": RED}
             diff_color = diff_colors.get(self.online_difficulty, WHITE)
+
+            # Left arrow button
+            left_btn = pygame.Rect(box_x + 200, box_y + 105, 40, 35)
+            pygame.draw.rect(self.screen, (30, 30, 50), left_btn)
+            pygame.draw.rect(self.screen, YELLOW, left_btn, 2)
+            left_arrow = self.font.render("<", True, YELLOW)
+            self.screen.blit(left_arrow, (left_btn.centerx - left_arrow.get_width()//2, left_btn.centery - left_arrow.get_height()//2))
+            self.online_diff_left_btn = left_btn
+
+            # Difficulty text
             diff_text = self.font.render(diff_name, True, diff_color)
+            self.screen.blit(diff_text, (box_x + 260, box_y + 108))
 
-            self.screen.blit(left_arrow, (box_x + 180, box_y + 125))
-            self.screen.blit(diff_text, (box_x + 220, box_y + 125))
-            self.screen.blit(right_arrow, (box_x + 220 + diff_text.get_width() + 20, box_y + 125))
-
-            arrow_hint = self.small_font.render("[LEFT/RIGHT] to change difficulty", True, GRAY)
-            self.screen.blit(arrow_hint, (box_x + 30, box_y + 148))
+            # Right arrow button
+            right_btn = pygame.Rect(box_x + 260 + diff_text.get_width() + 15, box_y + 105, 40, 35)
+            pygame.draw.rect(self.screen, (30, 30, 50), right_btn)
+            pygame.draw.rect(self.screen, YELLOW, right_btn, 2)
+            right_arrow = self.font.render(">", True, YELLOW)
+            self.screen.blit(right_arrow, (right_btn.centerx - right_arrow.get_width()//2, right_btn.centery - right_arrow.get_height()//2))
+            self.online_diff_right_btn = right_btn
 
             # Second separator
-            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 170), (box_x + box_width - 20, box_y + 170), 1)
-            options_start_y = box_y + 185
+            pygame.draw.line(self.screen, GRAY, (box_x + 20, box_y + 150), (box_x + box_width - 20, box_y + 150), 1)
+            options_start_y = box_y + 160
         else:
-            # PvP mode - no difficulty selector, start options after separator
-            options_start_y = box_y + 130
+            # PvP mode - no difficulty selector
+            options_start_y = box_y + 105
 
-        # Options
-        host_text = self.font.render("[H] HOST GAME", True, GREEN)
-        host_desc = self.small_font.render("Create a room and share code with friend", True, GRAY)
-        self.screen.blit(host_text, (box_x + 30, options_start_y))
-        self.screen.blit(host_desc, (box_x + 30, options_start_y + 35))
+        # HOST GAME button
+        host_btn = pygame.Rect(box_x + 30, options_start_y, box_width - 60, 55)
+        pygame.draw.rect(self.screen, (20, 60, 20), host_btn)
+        pygame.draw.rect(self.screen, GREEN, host_btn, 2)
+        host_text = self.font.render("HOST GAME", True, GREEN)
+        host_desc = self.small_font.render("Create a room and share code", True, GRAY)
+        self.screen.blit(host_text, (host_btn.centerx - host_text.get_width()//2, host_btn.y + 5))
+        self.screen.blit(host_desc, (host_btn.centerx - host_desc.get_width()//2, host_btn.y + 32))
+        self.online_host_btn = host_btn
 
-        join_text = self.font.render("[J] JOIN GAME", True, YELLOW)
-        join_desc = self.small_font.render("Enter 4-digit room code to join friend", True, GRAY)
-        self.screen.blit(join_text, (box_x + 30, options_start_y + 80))
-        self.screen.blit(join_desc, (box_x + 30, options_start_y + 115))
+        # JOIN GAME button
+        join_btn = pygame.Rect(box_x + 30, options_start_y + 65, box_width - 60, 55)
+        pygame.draw.rect(self.screen, (60, 60, 20), join_btn)
+        pygame.draw.rect(self.screen, YELLOW, join_btn, 2)
+        join_text = self.font.render("JOIN GAME", True, YELLOW)
+        join_desc = self.small_font.render("Enter 4-digit room code", True, GRAY)
+        self.screen.blit(join_text, (join_btn.centerx - join_text.get_width()//2, join_btn.y + 5))
+        self.screen.blit(join_desc, (join_btn.centerx - join_desc.get_width()//2, join_btn.y + 32))
+        self.online_join_btn = join_btn
 
         # Room code input (if joining)
         if self.online_input_active or len(self.online_input_code) > 0:
             code_label = self.font.render("Room Code:", True, WHITE)
-            self.screen.blit(code_label, (box_x + 30, options_start_y + 160))
+            self.screen.blit(code_label, (box_x + 30, options_start_y + 135))
 
             # Code input box
-            code_box = pygame.Rect(box_x + 180, options_start_y + 155, 150, 40)
+            code_box = pygame.Rect(box_x + 200, options_start_y + 130, 150, 40)
             pygame.draw.rect(self.screen, (60, 60, 80), code_box)
             pygame.draw.rect(self.screen, YELLOW, code_box, 2)
 
@@ -7272,16 +7352,20 @@ class Game:
 
             if len(self.online_input_code) == 4:
                 enter_hint = self.small_font.render("Press ENTER to join", True, GREEN)
-                self.screen.blit(enter_hint, (box_x + 180, options_start_y + 200))
+                self.screen.blit(enter_hint, (box_x + 200, options_start_y + 175))
 
         # Message
         if self.online_message:
             msg = self.font.render(self.online_message, True, ORANGE)
-            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, options_start_y + 240))
+            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, options_start_y + 210))
 
-        # Back option
-        back_text = self.small_font.render("[ESC] Back to Menu", True, RED)
-        self.screen.blit(back_text, (SCREEN_WIDTH // 2 - back_text.get_width() // 2, options_start_y + 275))
+        # Back button
+        back_btn = pygame.Rect(SCREEN_WIDTH // 2 - 100, options_start_y + 250, 200, 40)
+        pygame.draw.rect(self.screen, (60, 20, 20), back_btn)
+        pygame.draw.rect(self.screen, RED, back_btn, 2)
+        back_text = self.small_font.render("Back to Menu", True, RED)
+        self.screen.blit(back_text, (back_btn.centerx - back_text.get_width()//2, back_btn.centery - back_text.get_height()//2))
+        self.online_back_btn = back_btn
 
         # Version
         version = self.small_font.render("v3.0", True, WHITE)
