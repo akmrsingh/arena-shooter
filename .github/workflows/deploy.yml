@@ -36,6 +36,13 @@ jobs:
           # Add multiplayer.js script to index.html before </body>
           sed -i 's|</body>|<script src="multiplayer.js"></script>\n</body>|' build/web/index.html
 
+      - name: Add Firebase cloud accounts
+        run: |
+          # Copy firebase_accounts.js to build folder
+          cp firebase_accounts.js build/web/
+          # Add firebase_accounts.js script to index.html before </body>
+          sed -i 's|</body>|<script src="firebase_accounts.js"></script>\n</body>|' build/web/index.html
+
       - name: Add touch support for mobile
         run: |
           # Add touch event handler script to make "Ready to start" work on mobile

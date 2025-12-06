@@ -185,6 +185,81 @@ def storage_set(key, value):
     return False
 
 
+# Firebase cloud sync helpers
+firebase_pending_result = None
+firebase_result_ready = False
+
+def firebase_available():
+    """Check if Firebase is available in browser"""
+    try:
+        from platform import window
+        return hasattr(window, 'FirebaseDB')
+    except:
+        return False
+
+def firebase_call_async(method, *args):
+    """Call a Firebase async method and return a promise-like object"""
+    global firebase_pending_result, firebase_result_ready
+    try:
+        from platform import window
+        if not hasattr(window, 'FirebaseDB'):
+            return None
+
+        firebase_pending_result = None
+        firebase_result_ready = False
+
+        # Get the method from FirebaseDB
+        db = window.FirebaseDB
+        if method == "getUser":
+            promise = db.getUser(args[0])
+        elif method == "createUser":
+            promise = db.createUser(args[0], args[1], args[2] if len(args) > 2 else {})
+        elif method == "verifyLogin":
+            promise = db.verifyLogin(args[0], args[1])
+        elif method == "saveProgress":
+            promise = db.saveProgress(args[0], args[1])
+        elif method == "userExists":
+            promise = db.userExists(args[0])
+        else:
+            return None
+
+        return promise
+    except Exception as e:
+        print(f"Firebase call error: {e}")
+        return None
+
+def firebase_sync_create_user(username, passcode, initial_data=None):
+    """Synchronously create user in Firebase (non-blocking call)"""
+    try:
+        from platform import window
+        if not hasattr(window, 'FirebaseDB'):
+            return False
+
+        data = initial_data or {}
+        # Fire and forget - don't wait for result
+        window.FirebaseDB.createUser(username, passcode, window.JSON.parse(json_module.dumps(data)))
+        print(f"Firebase: Creating cloud account for {username}")
+        return True
+    except Exception as e:
+        print(f"Firebase create user error: {e}")
+        return False
+
+def firebase_sync_save_progress(username, progress_data):
+    """Save progress to Firebase (non-blocking call)"""
+    try:
+        from platform import window
+        if not hasattr(window, 'FirebaseDB'):
+            return False
+
+        # Fire and forget - don't wait for result
+        window.FirebaseDB.saveProgress(username, window.JSON.parse(json_module.dumps(progress_data)))
+        print(f"Firebase: Saving progress for {username}")
+        return True
+    except Exception as e:
+        print(f"Firebase save progress error: {e}")
+        return False
+
+
 def load_users():
     """Load all user accounts from localStorage"""
     global web_users
@@ -201,7 +276,7 @@ def save_users_to_storage():
 
 
 def register_user(username, passcode):
-    """Register a new user"""
+    """Register a new user (local + cloud)"""
     global web_users
     # Reload from storage first
     load_users()
@@ -213,31 +288,79 @@ def register_user(username, passcode):
     if len(passcode) < 4:
         return False, "Passcode too short (min 4 chars)"
 
-    web_users[username] = {
-        "passcode": passcode,
+    initial_data = {
         "coins": 0,
         "has_rpg": False,
         "has_shotgun": False,
         "medkit_charges": 0,
-        "has_sniper": False
+        "has_sniper": False,
+        "has_flamethrower": False,
+        "has_laser": False,
+        "has_minigun": False,
+        "has_crossbow": False,
+        "has_electric": False,
+        "has_freeze_ray": False,
+        "has_dual_pistols": False,
+        "has_throwing_knives": False
+    }
+
+    web_users[username] = {
+        "passcode": passcode,
+        **initial_data
     }
     save_users_to_storage()
+
+    # Also create in Firebase cloud for cross-device sync
+    firebase_sync_create_user(username, passcode, initial_data)
+
     return True, "Account created!"
 
 
 def login_user(username, passcode):
-    """Login a user"""
+    """Login a user (checks local first, then cloud)"""
     global current_user, web_users
     # Reload from storage first
     load_users()
 
-    if username not in web_users:
-        return False, "Username not found"
-    if web_users[username]["passcode"] != passcode:
-        return False, "Wrong passcode"
+    # First try local login
+    if username in web_users:
+        if web_users[username]["passcode"] != passcode:
+            return False, "Wrong passcode"
+        current_user = username
+        return True, "Login successful!"
 
+    # Local user not found - return message indicating cloud check might work
+    # Cloud login will be attempted asynchronously
+    return False, "Checking cloud..."
+
+
+def login_from_cloud_data(username, passcode, cloud_data):
+    """Create local user from cloud data after successful cloud login"""
+    global current_user, web_users
+
+    # Create local user with cloud data
+    web_users[username] = {
+        "passcode": passcode,
+        "coins": cloud_data.get("coins", 0),
+        "has_rpg": cloud_data.get("has_rpg", False),
+        "has_shotgun": cloud_data.get("has_shotgun", False),
+        "medkit_charges": cloud_data.get("medkit_charges", 0),
+        "has_sniper": cloud_data.get("has_sniper", False),
+        "has_flamethrower": cloud_data.get("has_flamethrower", False),
+        "has_laser": cloud_data.get("has_laser", False),
+        "has_minigun": cloud_data.get("has_minigun", False),
+        "has_crossbow": cloud_data.get("has_crossbow", False),
+        "has_electric": cloud_data.get("has_electric", False),
+        "has_freeze": cloud_data.get("has_freeze_ray", False),
+        "has_dual_pistols": cloud_data.get("has_dual_pistols", False),
+        "has_throwing_knives": cloud_data.get("has_throwing_knives", False),
+        "current_avatar": cloud_data.get("current_avatar", "default"),
+        "owned_avatars": cloud_data.get("owned_avatars", ["default"])
+    }
+    save_users_to_storage()
     current_user = username
-    return True, "Login successful!"
+    print(f"Cloud login successful! Synced data for {username}")
+    return True
 
 
 def logout_user():
@@ -261,7 +384,9 @@ def load_save():
                     data.get("has_laser", False), data.get("has_minigun", False),
                     data.get("has_crossbow", False), data.get("has_electric", False),
                     data.get("has_freeze", False), data.get("has_dual_pistols", False),
-                    data.get("has_throwing_knives", False))
+                    data.get("has_throwing_knives", False),
+                    data.get("current_avatar", "default"),
+                    data.get("owned_avatars", ["default"]))
 
     # Guest mode - try to load guest data from storage
     guest_data = storage_get(STORAGE_KEY_GUEST)
@@ -274,14 +399,38 @@ def load_save():
             web_save_data.get("has_laser", False), web_save_data.get("has_minigun", False),
             web_save_data.get("has_crossbow", False), web_save_data.get("has_electric", False),
             web_save_data.get("has_freeze", False), web_save_data.get("has_dual_pistols", False),
-            web_save_data.get("has_throwing_knives", False))
+            web_save_data.get("has_throwing_knives", False),
+            web_save_data.get("current_avatar", "default"),
+            web_save_data.get("owned_avatars", ["default"]))
 
 
 def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper,
                has_flamethrower=False, has_laser=False, has_minigun=False, has_crossbow=False,
-               has_electric=False, has_freeze=False, has_dual_pistols=False, has_throwing_knives=False):
-    """Save data for current user to localStorage"""
+               has_electric=False, has_freeze=False, has_dual_pistols=False, has_throwing_knives=False,
+               current_avatar="default", owned_avatars=None):
+    """Save data for current user to localStorage and Firebase cloud"""
     global current_user, web_users, web_save_data
+
+    if owned_avatars is None:
+        owned_avatars = ["default"]
+
+    progress_data = {
+        "coins": coins,
+        "has_rpg": has_rpg,
+        "has_shotgun": has_shotgun,
+        "medkit_charges": medkit_charges,
+        "has_sniper": has_sniper,
+        "has_flamethrower": has_flamethrower,
+        "has_laser": has_laser,
+        "has_minigun": has_minigun,
+        "has_crossbow": has_crossbow,
+        "has_electric": has_electric,
+        "has_freeze_ray": has_freeze,  # Note: Firebase uses has_freeze_ray
+        "has_dual_pistols": has_dual_pistols,
+        "has_throwing_knives": has_throwing_knives,
+        "current_avatar": current_avatar,
+        "owned_avatars": owned_avatars
+    }
 
     if current_user:
         # Reload users first to avoid overwriting
@@ -300,10 +449,15 @@ def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper,
             web_users[current_user]["has_freeze"] = has_freeze
             web_users[current_user]["has_dual_pistols"] = has_dual_pistols
             web_users[current_user]["has_throwing_knives"] = has_throwing_knives
+            web_users[current_user]["current_avatar"] = current_avatar
+            web_users[current_user]["owned_avatars"] = owned_avatars
             save_users_to_storage()
+
+            # Also sync to Firebase cloud
+            firebase_sync_save_progress(current_user, progress_data)
             return True
 
-    # Guest mode - save to guest storage
+    # Guest mode - save to guest storage (no cloud sync for guests)
     web_save_data["coins"] = coins
     web_save_data["has_rpg"] = has_rpg
     web_save_data["has_shotgun"] = has_shotgun
@@ -317,6 +471,8 @@ def save_game(coins, has_rpg, has_shotgun, medkit_charges, has_sniper,
     web_save_data["has_freeze"] = has_freeze
     web_save_data["has_dual_pistols"] = has_dual_pistols
     web_save_data["has_throwing_knives"] = has_throwing_knives
+    web_save_data["current_avatar"] = current_avatar
+    web_save_data["owned_avatars"] = owned_avatars
     storage_set(STORAGE_KEY_GUEST, web_save_data)
     return True
 
@@ -370,6 +526,534 @@ DIFFICULTY = {
     "impossible": {"count": 10, "health": 120, "speed": 5, "damage": 20, "fire_rate": 30, "color": (150, 0, 150), "points": 500, "coins": 15, "waves": 5, "has_boss": True},
     "pvp": {"count": 0, "health": 0, "speed": 0, "damage": 0, "fire_rate": 0, "color": WHITE, "points": 0, "coins": 0}  # No robots in PvP
 }
+
+# Avatar types - realistic character designs with body parts
+AVATAR_TYPES = {
+    "default": {
+        "name": "Soldier",
+        "price": 0,  # Free default avatar
+        "skin_color": (210, 180, 140),  # Tan skin
+        "shirt_color": (60, 80, 60),  # Military green
+        "pants_color": (50, 60, 50),  # Dark green
+        "hair_color": (40, 30, 20),  # Dark brown
+        "hair_style": "short",  # short, long, bald, mohawk
+        "glove_color": (30, 30, 30),  # Black tactical gloves
+        "boot_color": (40, 35, 30),  # Dark brown boots
+        "accessory": None,  # helmet, glasses, bandana, etc.
+        "description": "Standard soldier - ready for battle"
+    },
+    "commando": {
+        "name": "Commando",
+        "price": 500,
+        "skin_color": (180, 140, 100),  # Darker skin
+        "shirt_color": (30, 30, 35),  # Black tactical
+        "pants_color": (25, 25, 30),  # Dark pants
+        "hair_color": (20, 20, 20),  # Black hair
+        "hair_style": "bald",
+        "glove_color": (40, 40, 40),
+        "boot_color": (30, 30, 30),
+        "accessory": "bandana",
+        "description": "Elite special forces operative"
+    },
+    "ninja": {
+        "name": "Shadow",
+        "price": 800,
+        "skin_color": (220, 190, 160),  # Light skin
+        "shirt_color": (20, 20, 25),  # Near black
+        "pants_color": (15, 15, 20),
+        "hair_color": (10, 10, 10),
+        "hair_style": "hidden",
+        "glove_color": (20, 20, 25),
+        "boot_color": (20, 20, 25),
+        "accessory": "mask",
+        "description": "Silent assassin from the shadows"
+    },
+    "marine": {
+        "name": "Marine",
+        "price": 600,
+        "skin_color": (200, 160, 120),
+        "shirt_color": (80, 100, 80),  # Camo green
+        "pants_color": (90, 110, 90),
+        "hair_color": (60, 40, 20),  # Light brown
+        "hair_style": "short",
+        "glove_color": (100, 90, 70),  # Tan gloves
+        "boot_color": (60, 50, 40),
+        "accessory": "helmet",
+        "description": "US Marine - Semper Fi"
+    },
+    "mercenary": {
+        "name": "Merc",
+        "price": 750,
+        "skin_color": (190, 150, 110),
+        "shirt_color": (100, 80, 60),  # Desert tan
+        "pants_color": (90, 70, 50),
+        "hair_color": (100, 80, 60),  # Sandy hair
+        "hair_style": "mohawk",
+        "glove_color": (80, 70, 60),
+        "boot_color": (70, 60, 50),
+        "accessory": "glasses",
+        "description": "Gun for hire - no questions asked"
+    },
+    "cyborg": {
+        "name": "Cyborg",
+        "price": 1200,
+        "skin_color": (150, 150, 160),  # Metallic skin
+        "shirt_color": (60, 60, 70),  # Steel gray
+        "pants_color": (50, 50, 60),
+        "hair_color": (100, 100, 110),  # Silver
+        "hair_style": "short",
+        "glove_color": (70, 70, 80),
+        "boot_color": (50, 50, 55),
+        "accessory": "visor",
+        "description": "Half human, half machine"
+    },
+    "veteran": {
+        "name": "Veteran",
+        "price": 1000,
+        "skin_color": (200, 170, 140),
+        "shirt_color": (70, 90, 70),  # Olive drab
+        "pants_color": (60, 80, 60),
+        "hair_color": (150, 150, 150),  # Gray hair
+        "hair_style": "short",
+        "glove_color": (50, 50, 50),
+        "boot_color": (45, 40, 35),
+        "accessory": "cigar",
+        "description": "War-hardened survivor"
+    },
+    "arctic": {
+        "name": "Arctic",
+        "price": 700,
+        "skin_color": (230, 210, 190),  # Pale skin
+        "shirt_color": (220, 220, 230),  # White/gray camo
+        "pants_color": (200, 200, 210),
+        "hair_color": (200, 180, 160),  # Blonde
+        "hair_style": "hidden",
+        "glove_color": (180, 180, 190),
+        "boot_color": (150, 150, 160),
+        "accessory": "goggles",
+        "description": "Cold weather specialist"
+    }
+}
+
+
+class Avatar:
+    """Realistic avatar with articulated body parts and animations"""
+
+    def __init__(self, avatar_type="default"):
+        self.avatar_type = avatar_type
+        self.config = AVATAR_TYPES.get(avatar_type, AVATAR_TYPES["default"])
+
+        # Body part sizes (relative to player radius of 18)
+        self.head_radius = 8
+        self.torso_width = 14
+        self.torso_height = 12
+        self.arm_length = 12
+        self.arm_width = 4
+        self.hand_radius = 4
+        self.leg_length = 10
+        self.leg_width = 5
+
+        # Animation state
+        self.walk_cycle = 0  # 0-1 for walk animation
+        self.arm_angle_offset = 0  # For arm movements
+        self.reload_hand_offset = (0, 0)  # Hand position during reload
+
+    def draw(self, screen, x, y, angle, is_firing=False, is_reloading=False,
+             reload_phase=0, weapon_name="Rifle", walk_speed=0, anim_timer=0):
+        """Draw the full avatar with body parts"""
+        config = self.config
+
+        # Update walk animation
+        if walk_speed > 0.1:
+            self.walk_cycle = (self.walk_cycle + walk_speed * 0.15) % (math.pi * 2)
+        else:
+            # Smoothly return to neutral
+            self.walk_cycle *= 0.9
+
+        # Calculate body facing direction (torso rotates toward aim)
+        body_angle = angle
+
+        # Draw layers from back to front
+        # 1. Back leg
+        self._draw_leg(screen, x, y, body_angle, is_back=True)
+
+        # 2. Back arm (not holding weapon)
+        self._draw_arm(screen, x, y, body_angle, is_front=False, is_reloading=is_reloading,
+                      reload_phase=reload_phase, weapon_name=weapon_name, anim_timer=anim_timer)
+
+        # 3. Torso
+        self._draw_torso(screen, x, y, body_angle)
+
+        # 4. Head
+        self._draw_head(screen, x, y, body_angle, anim_timer)
+
+        # 5. Front leg
+        self._draw_leg(screen, x, y, body_angle, is_back=False)
+
+        # 6. Front arm (holding weapon) - drawn by weapon system
+        # The weapon drawing functions will call draw_holding_hand
+
+    def _draw_head(self, screen, x, y, angle, anim_timer):
+        """Draw the head with hair and accessories"""
+        config = self.config
+
+        # Head position (slightly above torso center)
+        head_x = x - math.sin(angle) * 2
+        head_y = y - math.cos(angle) * 2 - 6
+
+        # Draw head (oval shape)
+        head_surface = pygame.Surface((self.head_radius * 3, self.head_radius * 3), pygame.SRCALPHA)
+        pygame.draw.ellipse(head_surface, config["skin_color"],
+                           (self.head_radius * 0.5, self.head_radius * 0.3,
+                            self.head_radius * 2, self.head_radius * 2.4))
+
+        # Rotate head surface toward angle
+        rotated = pygame.transform.rotate(head_surface, -math.degrees(angle) - 90)
+        rect = rotated.get_rect(center=(int(head_x), int(head_y)))
+        screen.blit(rotated, rect)
+
+        # Draw hair based on style
+        hair_style = config["hair_style"]
+        if hair_style == "short":
+            # Short hair on top of head
+            hair_x = head_x + math.cos(angle - math.pi/2) * 2
+            hair_y = head_y + math.sin(angle - math.pi/2) * 2 - 3
+            pygame.draw.ellipse(screen, config["hair_color"],
+                              (int(hair_x - 6), int(hair_y - 4), 12, 8))
+        elif hair_style == "mohawk":
+            # Mohawk stripe
+            for i in range(5):
+                spike_x = head_x + math.cos(angle - math.pi/2) * (i - 2) * 2
+                spike_y = head_y + math.sin(angle - math.pi/2) * (i - 2) * 2 - 5 - abs(i-2)
+                pygame.draw.polygon(screen, config["hair_color"], [
+                    (int(spike_x - 2), int(spike_y + 4)),
+                    (int(spike_x), int(spike_y - 3)),
+                    (int(spike_x + 2), int(spike_y + 4))
+                ])
+
+        # Draw accessories
+        accessory = config.get("accessory")
+        if accessory == "helmet":
+            # Military helmet
+            pygame.draw.arc(screen, (80, 90, 80),
+                          (int(head_x - 9), int(head_y - 10), 18, 16),
+                          0, math.pi, 3)
+        elif accessory == "glasses":
+            # Sunglasses
+            glasses_y = head_y + 1
+            pygame.draw.line(screen, (20, 20, 20),
+                           (int(head_x - 6), int(glasses_y)),
+                           (int(head_x + 6), int(glasses_y)), 2)
+            pygame.draw.circle(screen, (30, 30, 40), (int(head_x - 4), int(glasses_y)), 3)
+            pygame.draw.circle(screen, (30, 30, 40), (int(head_x + 4), int(glasses_y)), 3)
+        elif accessory == "bandana":
+            # Bandana wrapped around head
+            pygame.draw.arc(screen, (150, 30, 30),
+                          (int(head_x - 8), int(head_y - 6), 16, 10),
+                          math.pi * 0.2, math.pi * 0.8, 3)
+        elif accessory == "mask":
+            # Ninja mask covering lower face
+            pygame.draw.arc(screen, (20, 20, 25),
+                          (int(head_x - 7), int(head_y - 2), 14, 12),
+                          math.pi, math.pi * 2, 4)
+        elif accessory == "visor":
+            # Cyber visor
+            pygame.draw.rect(screen, (100, 200, 255),
+                           (int(head_x - 7), int(head_y - 1), 14, 4))
+            pygame.draw.rect(screen, (150, 220, 255),
+                           (int(head_x - 7), int(head_y - 1), 14, 4), 1)
+        elif accessory == "goggles":
+            # Snow goggles
+            pygame.draw.ellipse(screen, (40, 40, 50),
+                              (int(head_x - 8), int(head_y - 3), 16, 6))
+            pygame.draw.ellipse(screen, (100, 150, 200),
+                              (int(head_x - 6), int(head_y - 2), 12, 4))
+        elif accessory == "cigar":
+            # Lit cigar
+            cigar_angle = angle + 0.3
+            cigar_x = head_x + math.cos(cigar_angle) * 6
+            cigar_y = head_y + math.sin(cigar_angle) * 6 + 3
+            pygame.draw.line(screen, (100, 70, 40),
+                           (int(cigar_x), int(cigar_y)),
+                           (int(cigar_x + math.cos(cigar_angle) * 8),
+                            int(cigar_y + math.sin(cigar_angle) * 8)), 3)
+            # Smoke
+            if anim_timer % 20 < 10:
+                smoke_x = cigar_x + math.cos(cigar_angle) * 10
+                smoke_y = cigar_y + math.sin(cigar_angle) * 10 - 3
+                pygame.draw.circle(screen, (200, 200, 200, 100),
+                                 (int(smoke_x), int(smoke_y)), 2)
+
+    def _draw_torso(self, screen, x, y, angle):
+        """Draw the torso/body"""
+        config = self.config
+
+        # Torso is an oval shape
+        torso_surface = pygame.Surface((self.torso_width + 4, self.torso_height + 4), pygame.SRCALPHA)
+        pygame.draw.ellipse(torso_surface, config["shirt_color"],
+                          (2, 2, self.torso_width, self.torso_height))
+        # Add slight highlight
+        pygame.draw.ellipse(torso_surface,
+                          tuple(min(255, c + 20) for c in config["shirt_color"]),
+                          (4, 3, self.torso_width - 4, self.torso_height // 2), 1)
+
+        # Rotate and draw
+        rotated = pygame.transform.rotate(torso_surface, -math.degrees(angle) - 90)
+        rect = rotated.get_rect(center=(int(x), int(y)))
+        screen.blit(rotated, rect)
+
+    def _draw_leg(self, screen, x, y, angle, is_back=False):
+        """Draw a leg with walk animation"""
+        config = self.config
+
+        # Leg offset from center
+        side_offset = -4 if is_back else 4
+
+        # Walk animation - legs swing opposite each other
+        walk_offset = math.sin(self.walk_cycle + (math.pi if is_back else 0)) * 0.4
+        leg_angle = angle + math.pi/2 + walk_offset  # Legs point "down" relative to body
+
+        # Hip position
+        hip_x = x + math.cos(angle + math.pi/2) * side_offset
+        hip_y = y + math.sin(angle + math.pi/2) * side_offset
+
+        # Knee position
+        knee_x = hip_x + math.cos(leg_angle + 0.2) * (self.leg_length * 0.5)
+        knee_y = hip_y + math.sin(leg_angle + 0.2) * (self.leg_length * 0.5)
+
+        # Foot position
+        foot_x = knee_x + math.cos(leg_angle - 0.1) * (self.leg_length * 0.5)
+        foot_y = knee_y + math.sin(leg_angle - 0.1) * (self.leg_length * 0.5)
+
+        # Draw thigh
+        pygame.draw.line(screen, config["pants_color"],
+                        (int(hip_x), int(hip_y)),
+                        (int(knee_x), int(knee_y)), self.leg_width)
+
+        # Draw shin
+        pygame.draw.line(screen, config["pants_color"],
+                        (int(knee_x), int(knee_y)),
+                        (int(foot_x), int(foot_y)), self.leg_width - 1)
+
+        # Draw boot
+        pygame.draw.circle(screen, config["boot_color"],
+                         (int(foot_x), int(foot_y)), 4)
+
+    def _draw_arm(self, screen, x, y, angle, is_front=True, is_reloading=False,
+                 reload_phase=0, weapon_name="Rifle", anim_timer=0):
+        """Draw an arm with reload animation"""
+        config = self.config
+
+        # Arm offset from center
+        side_offset = 5 if is_front else -5
+
+        # Shoulder position
+        shoulder_x = x + math.cos(angle + math.pi/2) * side_offset
+        shoulder_y = y + math.sin(angle + math.pi/2) * side_offset
+
+        if is_front:
+            # Front arm follows gun angle
+            arm_angle = angle
+            # During reload, hand moves to magazine/action
+            if is_reloading:
+                hand_pos = self._get_reload_hand_position(reload_phase, weapon_name, x, y, angle)
+                elbow_x = shoulder_x + math.cos(arm_angle + 0.3) * (self.arm_length * 0.5)
+                elbow_y = shoulder_y + math.sin(arm_angle + 0.3) * (self.arm_length * 0.5)
+                hand_x, hand_y = hand_pos
+            else:
+                elbow_x = shoulder_x + math.cos(arm_angle + 0.2) * (self.arm_length * 0.5)
+                elbow_y = shoulder_y + math.sin(arm_angle + 0.2) * (self.arm_length * 0.5)
+                hand_x = elbow_x + math.cos(arm_angle) * (self.arm_length * 0.6)
+                hand_y = elbow_y + math.sin(arm_angle) * (self.arm_length * 0.6)
+        else:
+            # Back arm for support or idle
+            arm_angle = angle + 0.5
+            elbow_x = shoulder_x + math.cos(arm_angle) * (self.arm_length * 0.4)
+            elbow_y = shoulder_y + math.sin(arm_angle) * (self.arm_length * 0.4)
+
+            if is_reloading:
+                # Support hand moves during reload
+                hand_pos = self._get_support_hand_position(reload_phase, weapon_name, x, y, angle)
+                hand_x, hand_y = hand_pos
+            else:
+                hand_x = elbow_x + math.cos(arm_angle - 0.2) * (self.arm_length * 0.5)
+                hand_y = elbow_y + math.sin(arm_angle - 0.2) * (self.arm_length * 0.5)
+
+        # Draw upper arm
+        pygame.draw.line(screen, config["shirt_color"],
+                        (int(shoulder_x), int(shoulder_y)),
+                        (int(elbow_x), int(elbow_y)), self.arm_width)
+
+        # Draw forearm (slightly different shade)
+        forearm_color = tuple(max(0, c - 10) for c in config["shirt_color"])
+        pygame.draw.line(screen, forearm_color,
+                        (int(elbow_x), int(elbow_y)),
+                        (int(hand_x), int(hand_y)), self.arm_width - 1)
+
+        # Draw gloved hand
+        pygame.draw.circle(screen, config["glove_color"],
+                         (int(hand_x), int(hand_y)), self.hand_radius)
+
+        # Draw fingers during reload
+        if is_reloading and not is_front:
+            self._draw_fingers(screen, hand_x, hand_y, angle, config["glove_color"])
+
+    def _draw_fingers(self, screen, hand_x, hand_y, angle, color):
+        """Draw individual fingers for detailed hand animation"""
+        # Draw 4 finger tips
+        for i in range(4):
+            finger_angle = angle + (i - 1.5) * 0.15
+            finger_x = hand_x + math.cos(finger_angle) * 5
+            finger_y = hand_y + math.sin(finger_angle) * 5
+            pygame.draw.circle(screen, color, (int(finger_x), int(finger_y)), 2)
+
+    def _get_reload_hand_position(self, phase, weapon_name, x, y, angle):
+        """Get the position of the main hand during reload animation"""
+        # Base position (holding the gun grip)
+        base_x = x + math.cos(angle) * 15
+        base_y = y + math.sin(angle) * 15
+
+        # During reload, hand stays on grip but moves slightly
+        if weapon_name == "Rifle":
+            if phase < 0.3:
+                # Tilting gun
+                offset = phase / 0.3 * 3
+                return base_x, base_y + offset
+            else:
+                return base_x, base_y + 3
+        elif weapon_name == "Shotgun":
+            # Pump action - hand moves back and forth
+            if phase < 0.4:
+                offset = phase / 0.4 * 8
+                return base_x - offset * math.cos(angle), base_y - offset * math.sin(angle)
+            elif phase < 0.6:
+                return base_x - 8 * math.cos(angle), base_y - 8 * math.sin(angle)
+            else:
+                offset = (1 - (phase - 0.6) / 0.4) * 8
+                return base_x - offset * math.cos(angle), base_y - offset * math.sin(angle)
+
+        return base_x, base_y
+
+    def _get_support_hand_position(self, phase, weapon_name, x, y, angle):
+        """Get the position of the support hand during reload"""
+        if weapon_name == "Rifle":
+            # Support hand grabs magazine
+            mag_x = x + math.cos(angle) * 10 + math.cos(angle + math.pi/2) * 5
+            mag_y = y + math.sin(angle) * 10 + math.sin(angle + math.pi/2) * 5
+
+            if phase < 0.3:
+                # Move to magazine
+                return mag_x, mag_y
+            elif phase < 0.5:
+                # Pull magazine out
+                offset = (phase - 0.3) / 0.2 * 15
+                return mag_x + math.cos(angle + math.pi/2) * offset, mag_y + math.sin(angle + math.pi/2) * offset
+            elif phase < 0.8:
+                # Insert new magazine
+                offset = 15 * (1 - (phase - 0.5) / 0.3)
+                return mag_x + math.cos(angle + math.pi/2) * offset, mag_y + math.sin(angle + math.pi/2) * offset
+            else:
+                return mag_x, mag_y
+
+        elif weapon_name == "Handgun":
+            # Support hand pulls slide
+            slide_x = x + math.cos(angle) * 12
+            slide_y = y + math.sin(angle) * 12
+
+            if phase < 0.3:
+                offset = phase / 0.3 * 6
+                return slide_x - math.cos(angle) * offset, slide_y - math.sin(angle) * offset
+            elif phase < 0.7:
+                return slide_x - math.cos(angle) * 6, slide_y - math.sin(angle) * 6
+            else:
+                offset = (1 - (phase - 0.7) / 0.3) * 6
+                return slide_x - math.cos(angle) * offset, slide_y - math.sin(angle) * offset
+
+        elif weapon_name == "Shotgun":
+            # Support hand on pump
+            pump_x = x + math.cos(angle) * 18
+            pump_y = y + math.sin(angle) * 18
+
+            if phase < 0.4:
+                offset = phase / 0.4 * 12
+                return pump_x - math.cos(angle) * offset, pump_y - math.sin(angle) * offset
+            elif phase < 0.6:
+                return pump_x - math.cos(angle) * 12, pump_y - math.sin(angle) * 12
+            else:
+                offset = (1 - (phase - 0.6) / 0.4) * 12
+                return pump_x - math.cos(angle) * offset, pump_y - math.sin(angle) * offset
+
+        # Default support hand position
+        return x + math.cos(angle) * 15, y + math.sin(angle) * 15
+
+    def draw_holding_hands(self, screen, x, y, angle, weapon_name, is_reloading=False,
+                          reload_phase=0, is_firing=False, recoil=0):
+        """Draw both hands holding the weapon (called after weapon is drawn)"""
+        config = self.config
+
+        # Calculate hand positions based on weapon type
+        if weapon_name in ["Rifle", "Shotgun", "Sniper", "Minigun"]:
+            # Two-handed grip
+            # Front hand on foregrip
+            front_dist = 20 - recoil * 0.5
+            front_x = x + math.cos(angle) * front_dist
+            front_y = y + math.sin(angle) * front_dist
+
+            # Back hand on grip
+            back_dist = 8 - recoil * 0.3
+            back_x = x + math.cos(angle) * back_dist + math.cos(angle + math.pi/2) * 3
+            back_y = y + math.sin(angle) * back_dist + math.sin(angle + math.pi/2) * 3
+
+            # Modify positions during reload
+            if is_reloading:
+                front_x, front_y = self._get_support_hand_position(reload_phase, weapon_name, x, y, angle)
+
+            # Draw hands
+            pygame.draw.circle(screen, config["glove_color"], (int(front_x), int(front_y)), self.hand_radius)
+            pygame.draw.circle(screen, config["glove_color"], (int(back_x), int(back_y)), self.hand_radius)
+
+            # Draw finger details on front hand
+            self._draw_fingers(screen, front_x, front_y, angle, config["glove_color"])
+
+        elif weapon_name == "Handgun":
+            # One hand main, one support
+            main_x = x + math.cos(angle) * 10
+            main_y = y + math.sin(angle) * 10
+
+            support_x = main_x + math.cos(angle + math.pi/2) * 3
+            support_y = main_y + math.sin(angle + math.pi/2) * 3
+
+            if is_reloading:
+                support_x, support_y = self._get_support_hand_position(reload_phase, weapon_name, x, y, angle)
+
+            pygame.draw.circle(screen, config["glove_color"], (int(main_x), int(main_y)), self.hand_radius)
+            pygame.draw.circle(screen, config["glove_color"], (int(support_x), int(support_y)), self.hand_radius - 1)
+
+        elif weapon_name == "Dual Pistols":
+            # Both hands extended
+            left_x = x + math.cos(angle - 0.3) * 12
+            left_y = y + math.sin(angle - 0.3) * 12
+            right_x = x + math.cos(angle + 0.3) * 12
+            right_y = y + math.sin(angle + 0.3) * 12
+
+            pygame.draw.circle(screen, config["glove_color"], (int(left_x), int(left_y)), self.hand_radius)
+            pygame.draw.circle(screen, config["glove_color"], (int(right_x), int(right_y)), self.hand_radius)
+
+        elif weapon_name == "RPG":
+            # Shoulder-mounted
+            shoulder_x = x + math.cos(angle + math.pi/2) * 5
+            shoulder_y = y + math.sin(angle + math.pi/2) * 5
+            grip_x = x + math.cos(angle) * 15
+            grip_y = y + math.sin(angle) * 15
+
+            pygame.draw.circle(screen, config["glove_color"], (int(shoulder_x), int(shoulder_y)), self.hand_radius)
+            pygame.draw.circle(screen, config["glove_color"], (int(grip_x), int(grip_y)), self.hand_radius)
+
+        else:
+            # Default single hand
+            hand_x = x + math.cos(angle) * 12
+            hand_y = y + math.sin(angle) * 12
+            pygame.draw.circle(screen, config["glove_color"], (int(hand_x), int(hand_y)), self.hand_radius)
 
 
 class VirtualJoystick:
@@ -974,6 +1658,151 @@ class Grenade:
             # Add glow effect when close to exploding
             if self.lifetime < 20:
                 pygame.draw.circle(screen, (255, 200, 100), (int(spark_x), int(spark_y)), spark_size + 2, 1)
+
+
+class SmokeGrenade:
+    """Smoke grenade that creates a smoke cloud to block robot vision"""
+    def __init__(self, x, y, angle):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.speed = 8
+        self.radius = 7
+        self.lifetime = 60  # Pops after 1 second
+        self.color = (100, 100, 100)
+        self.popped = False
+        self.roll_angle = 0
+
+    def update(self):
+        # Smoke grenade rolls
+        self.x += math.cos(self.angle) * self.speed
+        self.y += math.sin(self.angle) * self.speed
+
+        # Roll friction
+        if self.speed > 0.5:
+            self.speed *= 0.96
+        else:
+            self.speed = 0
+
+        self.roll_angle += self.speed * 0.3
+        self.lifetime -= 1
+
+        # Bounce off walls
+        if self.x < self.radius:
+            self.x = self.radius
+            self.angle = math.pi - self.angle
+            self.speed *= 0.7
+        elif self.x > MAP_WIDTH - self.radius:
+            self.x = MAP_WIDTH - self.radius
+            self.angle = math.pi - self.angle
+            self.speed *= 0.7
+        if self.y < self.radius:
+            self.y = self.radius
+            self.angle = -self.angle
+            self.speed *= 0.7
+        elif self.y > MAP_HEIGHT - self.radius:
+            self.y = MAP_HEIGHT - self.radius
+            self.angle = -self.angle
+            self.speed *= 0.7
+
+    def should_pop(self):
+        return self.lifetime <= 0 and not self.popped
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Draw smoke grenade body (gray cylinder)
+        pygame.draw.circle(screen, (80, 80, 90), (int(sx), int(sy)), self.radius)
+        pygame.draw.circle(screen, (100, 100, 110), (int(sx), int(sy)), self.radius, 2)
+
+        # Draw stripe (to differentiate from regular grenade)
+        stripe_y1 = sy - 2
+        stripe_y2 = sy + 2
+        pygame.draw.line(screen, (200, 200, 200), (sx - self.radius + 2, stripe_y1),
+                        (sx + self.radius - 2, stripe_y1), 2)
+
+        # Draw pin/cap
+        cap_x = sx + math.cos(self.roll_angle + math.pi) * (self.radius - 2)
+        cap_y = sy + math.sin(self.roll_angle + math.pi) * (self.radius - 2)
+        pygame.draw.circle(screen, (60, 60, 60), (int(cap_x), int(cap_y)), 3)
+
+        # Hissing indicator when about to pop
+        if self.lifetime < 30:
+            hiss_size = 2 if self.lifetime > 15 else 3
+            hiss_x = cap_x + math.cos(self.roll_angle + math.pi) * 4
+            hiss_y = cap_y + math.sin(self.roll_angle + math.pi) * 4
+            pygame.draw.circle(screen, (180, 180, 180), (int(hiss_x), int(hiss_y)), hiss_size)
+
+
+class SmokeCloud:
+    """Smoke cloud effect that blocks robot vision"""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 20  # Start small
+        self.max_radius = 150  # Expands to this size
+        self.lifetime = 300  # 5 seconds at 60fps
+        self.max_lifetime = 300
+        self.particles = []
+        self.expanding = True
+
+        # Create smoke particles
+        for _ in range(30):
+            self.particles.append({
+                'offset_x': random.uniform(-50, 50),
+                'offset_y': random.uniform(-50, 50),
+                'size': random.randint(20, 40),
+                'drift_x': random.uniform(-0.3, 0.3),
+                'drift_y': random.uniform(-0.5, -0.1),  # Smoke rises
+                'alpha': random.randint(150, 200)
+            })
+
+    def update(self):
+        self.lifetime -= 1
+
+        # Expand smoke cloud
+        if self.expanding and self.radius < self.max_radius:
+            self.radius += 5
+        elif self.radius >= self.max_radius:
+            self.expanding = False
+
+        # Fade out in last second
+        if self.lifetime < 60:
+            self.radius = max(10, self.radius - 2)
+
+        # Update particles (drift)
+        for p in self.particles:
+            p['offset_x'] += p['drift_x']
+            p['offset_y'] += p['drift_y']
+
+    def is_done(self):
+        return self.lifetime <= 0
+
+    def point_in_smoke(self, x, y):
+        """Check if a point is inside the smoke cloud"""
+        dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
+        return dist < self.radius
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Calculate alpha based on lifetime
+        alpha_mult = min(1.0, self.lifetime / 60) if self.lifetime < 60 else 1.0
+
+        # Draw smoke particles
+        for p in self.particles:
+            px = sx + p['offset_x'] * (self.radius / self.max_radius)
+            py = sy + p['offset_y'] * (self.radius / self.max_radius)
+            size = int(p['size'] * (self.radius / self.max_radius))
+
+            if size > 0:
+                # Gray smoke with varying darkness
+                gray = random.randint(140, 180)
+                color = (gray, gray, gray)
+                pygame.draw.circle(screen, color, (int(px), int(py)), size)
+
+        # Draw outer boundary (faint)
+        pygame.draw.circle(screen, (160, 160, 160), (int(sx), int(sy)), int(self.radius), 2)
 
 
 class Explosion:
@@ -1716,6 +2545,14 @@ class Player:
         self.minigun_rotation = 0  # Minigun barrel rotation angle
         self.is_firing = False  # Track if currently firing
 
+        # Avatar system
+        self.avatar_type = "default"  # Will be loaded from save
+        self.avatar = Avatar("default")
+        self.owned_avatars = ["default"]  # Player always owns default avatar
+        self.walk_speed = 0  # For walk animation
+        self.last_x = x
+        self.last_y = y
+
         # Weapon system with realistic stats
         self.current_weapon = 0
         self.recoil = 0  # Current recoil offset (visual kickback)
@@ -1736,13 +2573,18 @@ class Player:
             # Grenade - explosive
             {"name": "Grenade", "ammo": 4, "max_ammo": 4, "reloads": 0, "fire_rate": 50, "damage": 150,
              "bullet_speed": 0, "color": (80, 100, 80), "gun_length": 6, "gun_width": 6,
-             "melee": False, "grenade": True, "no_reload": True, "recoil": 0}
+             "melee": False, "grenade": True, "no_reload": True, "recoil": 0},
+            # Smoke Grenade - creates smoke cloud to block robot vision
+            {"name": "Smoke", "ammo": 3, "max_ammo": 3, "reloads": 0, "fire_rate": 50, "damage": 0,
+             "bullet_speed": 0, "color": (120, 120, 130), "gun_length": 6, "gun_width": 6,
+             "melee": False, "grenade": False, "smoke_grenade": True, "no_reload": True, "recoil": 0}
         ]
 
         # Load saved coins and unlocked weapons
         (saved_coins, saved_rpg, saved_shotgun, saved_medkit_charges, saved_sniper,
          saved_flamethrower, saved_laser, saved_minigun, saved_crossbow,
-         saved_electric, saved_freeze, saved_dual_pistols, saved_throwing_knives) = load_save()
+         saved_electric, saved_freeze, saved_dual_pistols, saved_throwing_knives,
+         saved_avatar, saved_owned_avatars) = load_save()
         self.coins = saved_coins
         self.has_rpg = saved_rpg
         self.has_shotgun = saved_shotgun
@@ -1756,6 +2598,10 @@ class Player:
         self.has_freeze = saved_freeze
         self.has_dual_pistols = saved_dual_pistols
         self.has_throwing_knives = saved_throwing_knives
+        # Load avatar settings
+        self.avatar_type = saved_avatar
+        self.avatar = Avatar(saved_avatar)
+        self.owned_avatars = saved_owned_avatars if saved_owned_avatars else ["default"]
 
         # Shotgun - pump-action, 8 shell mag
         if self.has_shotgun:
@@ -2255,10 +3101,11 @@ class Player:
         self.save_progress()  # Auto-save when coins are added
 
     def save_progress(self):
-        """Save coins and weapon unlocks"""
+        """Save coins, weapon unlocks, and avatar data"""
         return save_game(self.coins, self.has_rpg, self.has_shotgun, self.medkit_charges, self.has_sniper,
                         self.has_flamethrower, self.has_laser, self.has_minigun, self.has_crossbow,
-                        self.has_electric, self.has_freeze, self.has_dual_pistols, self.has_throwing_knives)
+                        self.has_electric, self.has_freeze, self.has_dual_pistols, self.has_throwing_knives,
+                        self.avatar_type, self.owned_avatars)
 
     def use_medkit(self):
         """Use a medkit charge to heal to full HP"""
@@ -2320,6 +3167,12 @@ class Player:
 
         # Update animation timer
         self.anim_timer += 1
+
+        # Calculate walk speed for avatar animation
+        move_dist = math.sqrt((self.x - self.last_x)**2 + (self.y - self.last_y)**2)
+        self.walk_speed = move_dist
+        self.last_x = self.x
+        self.last_y = self.y
 
         # Update minigun barrel rotation when firing
         weapon = self.weapons[self.current_weapon]
@@ -2393,6 +3246,12 @@ class Player:
     def apply_recoil(self, amount):
         """Apply recoil when shooting"""
         self.recoil = min(self.recoil + amount, 15)  # Cap recoil
+
+    def set_avatar(self, avatar_type):
+        """Change the player's avatar"""
+        if avatar_type in AVATAR_TYPES:
+            self.avatar_type = avatar_type
+            self.avatar = Avatar(avatar_type)
 
     def start_reload(self):
         """Start the reload animation"""
@@ -2530,19 +3389,27 @@ class Player:
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
 
-        # Body (flash white when hit) - Player 1 is light blue
-        body_color = WHITE if self.hit_flash > 0 else LIGHT_BLUE
-        pygame.draw.circle(screen, body_color, (int(sx), int(sy)), self.radius)
-        pygame.draw.circle(screen, WHITE, (int(sx), int(sy)), self.radius, 2)
+        # Draw avatar body with articulated parts
+        weapon_name = self.weapon["name"]
+        self.avatar.draw(screen, sx, sy, self.angle,
+                        is_firing=self.is_firing,
+                        is_reloading=self.reloading,
+                        reload_phase=self.reload_phase,
+                        weapon_name=weapon_name,
+                        walk_speed=self.walk_speed,
+                        anim_timer=self.anim_timer)
+
+        # Flash white overlay when hit
+        if self.hit_flash > 0:
+            flash_surf = pygame.Surface((self.radius * 2 + 10, self.radius * 2 + 10), pygame.SRCALPHA)
+            pygame.draw.circle(flash_surf, (255, 255, 255, 100), (self.radius + 5, self.radius + 5), self.radius)
+            screen.blit(flash_surf, (int(sx - self.radius - 5), int(sy - self.radius - 5)))
 
         # Calculate recoil offset (gun pulls back when shooting)
         recoil_offset = self.recoil
 
         # Get reload animation offsets
         reload_offset_x, reload_offset_y, reload_tilt = self.get_reload_animation_offset()
-
-        # Draw realistic gun based on weapon type
-        weapon_name = self.weapon["name"]
 
         if weapon_name == "Rifle":
             self.draw_rifle(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
@@ -2552,6 +3419,8 @@ class Player:
             self.draw_knife(screen, sx, sy)
         elif weapon_name == "Grenade":
             self.draw_grenade_weapon(screen, sx, sy)
+        elif weapon_name == "Smoke":
+            self.draw_smoke_grenade_weapon(screen, sx, sy)
         elif weapon_name == "Shotgun":
             self.draw_shotgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
         elif weapon_name == "RPG":
@@ -2581,13 +3450,20 @@ class Player:
             gun_y = sy + math.sin(self.angle) * gun_length
             pygame.draw.line(screen, DARK_GRAY, (sx, sy), (gun_x, gun_y), 6)
 
+        # Draw avatar hands holding the weapon
+        self.avatar.draw_holding_hands(screen, sx, sy, self.angle, weapon_name,
+                                       is_reloading=self.reloading,
+                                       reload_phase=self.reload_phase,
+                                       is_firing=self.is_firing,
+                                       recoil=recoil_offset)
+
         # Draw reload indicator if reloading
         if self.reloading:
             # Draw reload progress bar above player
             bar_width = 40
             bar_height = 6
             bar_x = sx - bar_width // 2
-            bar_y = sy - self.radius - 20
+            bar_y = sy - self.radius - 25  # Moved higher to account for avatar head
             # Background
             pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
             # Progress
@@ -2795,6 +3671,38 @@ class Player:
             spark_color = (255, 200 + int(55 * math.sin(self.anim_timer)), 50)
             pygame.draw.circle(screen, spark_color, (int(spark_x), int(spark_y)), 3)
             pygame.draw.circle(screen, (255, 255, 200), (int(spark_x), int(spark_y)), 1)
+
+    def draw_smoke_grenade_weapon(self, screen, sx, sy):
+        """Draw smoke grenade in hand with ready-to-throw animation"""
+        angle = self.angle
+        # Hand position - outside player body with slight bob
+        bob = math.sin(self.anim_timer * 0.12) * 2
+        hand_x = sx + math.cos(angle) * (self.radius + 8 + bob)
+        hand_y = sy + math.sin(angle) * (self.radius + 8 + bob)
+
+        # Smoke grenade body - gray/silver color
+        glow = int(15 * abs(math.sin(self.anim_timer * 0.15)))
+        pygame.draw.circle(screen, (90 + glow, 90 + glow, 95 + glow), (int(hand_x), int(hand_y)), 7)
+        pygame.draw.circle(screen, (120 + glow, 120 + glow, 130 + glow), (int(hand_x), int(hand_y)), 7, 2)
+
+        # Spoon/lever - slight wobble
+        spoon_wobble = math.sin(self.anim_timer * 0.15) * 0.1
+        spoon_end_x = hand_x + math.cos(angle - 0.5 + spoon_wobble) * 10
+        spoon_end_y = hand_y + math.sin(angle - 0.5 + spoon_wobble) * 10
+        pygame.draw.line(screen, (80, 80, 85), (hand_x, hand_y), (spoon_end_x, spoon_end_y), 2)
+
+        # Pin ring
+        ring_shine = int(20 * abs(math.sin(self.anim_timer * 0.25)))
+        pygame.draw.circle(screen, (140 + ring_shine, 140 + ring_shine, 145 + ring_shine), (int(hand_x + 3), int(hand_y - 3)), 3, 1)
+
+        # Smoke wisps when throwing
+        if self.is_firing:
+            for i in range(3):
+                wisp_offset = self.anim_timer * 0.5 + i * 1.0
+                wisp_x = hand_x + math.sin(wisp_offset) * 5
+                wisp_y = hand_y - abs(math.sin(wisp_offset * 0.7)) * 8 - i * 3
+                wisp_alpha = 150 - i * 40
+                pygame.draw.circle(screen, (wisp_alpha, wisp_alpha, wisp_alpha + 10), (int(wisp_x), int(wisp_y)), 2 - i//2)
 
     def draw_shotgun(self, screen, sx, sy, recoil, reload_x=0, reload_y=0, reload_tilt=0):
         """Draw pump-action shotgun"""
@@ -3356,6 +4264,8 @@ class Player2(Player):
             self.draw_knife(screen, sx, sy)
         elif weapon_name == "Grenade":
             self.draw_grenade_weapon(screen, sx, sy)
+        elif weapon_name == "Smoke":
+            self.draw_smoke_grenade_weapon(screen, sx, sy)
         elif weapon_name == "Shotgun":
             self.draw_shotgun(screen, sx, sy, recoil_offset, reload_offset_x, reload_offset_y, reload_tilt)
         elif weapon_name == "RPG":
@@ -3411,7 +4321,7 @@ class Game:
         self.big_font = pygame.font.Font(None, 72)
         self.small_font = pygame.font.Font(None, 32)
 
-        self.state = "login"  # login, menu, playing, gameover, shop, online_menu, waiting
+        self.state = "login"  # login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
         self.difficulty = "medium"
         self.game_mode = "solo"  # "solo", "pvp", "coop", "online_coop", "online_pvp"
         self.selected_map = "random"  # Map selection: random, arena, corridors, fortress, open
@@ -3421,6 +4331,9 @@ class Game:
         self.camera2 = Camera()  # Second camera for split-screen
         self.split_screen = False  # Enable split-screen for local multiplayer
         self.shop_prompted = False  # Track if we already asked about RPG
+
+        # Avatar shop state
+        self.selected_avatar_index = 0  # Currently selected avatar in shop
         self.pvp_winner = None  # Track winner in PvP mode
 
         # Online multiplayer state
@@ -3449,6 +4362,11 @@ class Game:
         self.login_mode = "login"  # "login" or "register"
         self.login_message = ""
         self.active_input = "username"  # "username" or "passcode"
+        # Cloud login state
+        self.cloud_login_pending = False
+        self.cloud_login_promise = None
+        self.cloud_login_username = ""
+        self.cloud_login_passcode = ""
 
         # Login screen touch button rects (initialized in draw_login_screen)
         self.login_submit_btn = None
@@ -3561,6 +4479,8 @@ class Game:
         self.robots = []
         self.bullets = []
         self.grenades = []
+        self.smoke_grenades = []  # Smoke grenades in flight
+        self.smoke_clouds = []  # Active smoke clouds
         self.explosions = []
         self.obstacles = []
         self.shell_casings = []  # Shell casing particles
@@ -3838,6 +4758,88 @@ class Game:
             if self.current_wave == self.max_waves:
                 self.spawn_boss()
 
+    def start_cloud_login(self, username, passcode):
+        """Start asynchronous cloud login check"""
+        try:
+            from platform import window
+            if not hasattr(window, 'FirebaseDB'):
+                self.login_message = "Cloud not available"
+                return
+
+            self.cloud_login_pending = True
+            self.cloud_login_username = username
+            self.cloud_login_passcode = passcode
+
+            # Start the async verification
+            self.cloud_login_promise = window.FirebaseDB.verifyLogin(username, passcode)
+            print(f"Starting cloud login check for {username}")
+        except Exception as e:
+            self.login_message = f"Cloud error: {str(e)[:20]}"
+            self.cloud_login_pending = False
+
+    def check_cloud_login(self):
+        """Check if cloud login has completed (called each frame)"""
+        if not self.cloud_login_pending or not self.cloud_login_promise:
+            return
+
+        try:
+            from platform import window
+
+            # Check if promise has resolved by looking at its state
+            # JavaScript promises have a [[PromiseState]] we can check
+            promise = self.cloud_login_promise
+
+            # Use a callback approach - attach handlers to the promise
+            # We'll check via a flag set by the callback
+            if not hasattr(self, 'cloud_login_result'):
+                self.cloud_login_result = None
+                self.cloud_login_done = False
+
+                # Define callback functions
+                def on_success(result):
+                    self.cloud_login_result = result
+                    self.cloud_login_done = True
+
+                def on_error(error):
+                    self.cloud_login_result = {"success": False, "error": str(error)}
+                    self.cloud_login_done = True
+
+                # Attach callbacks using JavaScript's then/catch
+                promise.then(window.Function("result", f"""
+                    window._cloud_login_result = result;
+                    window._cloud_login_done = true;
+                """))
+                promise.catch(window.Function("error", f"""
+                    window._cloud_login_result = {{"success": false, "error": String(error)}};
+                    window._cloud_login_done = true;
+                """))
+                window._cloud_login_done = False
+
+            # Check if JavaScript callback has been called
+            if hasattr(window, '_cloud_login_done') and window._cloud_login_done:
+                result = window._cloud_login_result
+                self.cloud_login_pending = False
+
+                # Clean up
+                delattr(self, 'cloud_login_result') if hasattr(self, 'cloud_login_result') else None
+                delattr(self, 'cloud_login_done') if hasattr(self, 'cloud_login_done') else None
+
+                if result and result.get("success"):
+                    # Cloud login successful - sync data locally
+                    cloud_data = result.get("data", {})
+                    login_from_cloud_data(self.cloud_login_username, self.cloud_login_passcode, cloud_data)
+                    self.login_message = "Cloud login success!"
+                    pygame.key.stop_text_input()
+                    self.state = "menu"
+                else:
+                    error_msg = result.get("error", "Unknown error") if result else "Login failed"
+                    self.login_message = f"Not found: {error_msg}"
+
+        except Exception as e:
+            print(f"Cloud login check error: {e}")
+            self.login_message = "Username not found"
+            self.cloud_login_pending = False
+
     def start_game(self, difficulty):
         self.difficulty = difficulty
         self.reset_game()
@@ -3894,6 +4896,12 @@ class Game:
             if result:
                 grenade = Grenade(result["x"], result["y"], result["angle"])
                 self.grenades.append(grenade)
+        elif self.player2.weapon.get("smoke_grenade", False):
+            # Throw smoke grenade
+            result = self.player2.shoot()
+            if result:
+                smoke = SmokeGrenade(result["x"], result["y"], result["angle"])
+                self.smoke_grenades.append(smoke)
         elif self.player2.weapon.get("melee", False):
             # Melee attack
             result = self.player2.shoot()
@@ -3984,10 +4992,16 @@ class Game:
                             self.state = "menu"
                     else:
                         success, msg = login_user(self.username_input, self.passcode_input)
-                        self.login_message = msg
                         if success:
+                            self.login_message = msg
                             pygame.key.stop_text_input()
                             self.state = "menu"
+                        elif msg == "Checking cloud...":
+                            # Try cloud login
+                            self.login_message = "Checking cloud account..."
+                            self.start_cloud_login(self.username_input, self.passcode_input)
+                        else:
+                            self.login_message = msg
                     return
 
                 # Check toggle button (switch between login/register)
@@ -4182,10 +5196,16 @@ class Game:
                                 self.state = "menu"
                         else:
                             success, msg = login_user(self.username_input, self.passcode_input)
-                            self.login_message = msg
                             if success:
+                                self.login_message = msg
                                 pygame.key.stop_text_input()
                                 self.state = "menu"
+                            elif msg == "Checking cloud...":
+                                # Try cloud login
+                                self.login_message = "Checking cloud account..."
+                                self.start_cloud_login(self.username_input, self.passcode_input)
+                            else:
+                                self.login_message = msg
                     elif event.key == pygame.K_ESCAPE:
                         # Play as guest (skip login)
                         pygame.key.stop_text_input()
@@ -4386,10 +5406,38 @@ class Game:
                         if not self.player.has_minigun and self.player.coins >= 200:
                             self.player.unlock_minigun()
                         self.state = "playing"
+                    elif event.key == pygame.K_a:
+                        # Open Avatar Shop
+                        self.state = "avatar_shop"
                     elif event.key == pygame.K_ESCAPE or event.key == pygame.K_n:
                         # Close shop - stop auto-prompting
                         self.shop_prompted = True
                         self.state = "playing"
+
+                elif self.state == "avatar_shop":
+                    avatar_keys = list(AVATAR_TYPES.keys())
+                    if event.key == pygame.K_LEFT:
+                        self.selected_avatar_index = (self.selected_avatar_index - 1) % len(avatar_keys)
+                    elif event.key == pygame.K_RIGHT:
+                        self.selected_avatar_index = (self.selected_avatar_index + 1) % len(avatar_keys)
+                    elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                        # Buy or equip the selected avatar
+                        selected_type = avatar_keys[self.selected_avatar_index]
+                        avatar_data = AVATAR_TYPES[selected_type]
+
+                        if selected_type in self.player.owned_avatars:
+                            # Already owned - equip it
+                            self.player.set_avatar(selected_type)
+                            self.player.save_progress()
+                        elif self.player.coins >= avatar_data["price"]:
+                            # Buy it
+                            self.player.coins -= avatar_data["price"]
+                            self.player.owned_avatars.append(selected_type)
+                            self.player.set_avatar(selected_type)
+                            self.player.save_progress()
+                    elif event.key == pygame.K_ESCAPE or event.key == pygame.K_BACKSPACE:
+                        # Go back to weapon shop
+                        self.state = "shop"
 
                 elif self.state == "online_menu":
                     if event.key == pygame.K_1 and not self.online_input_active:
@@ -4481,6 +5529,12 @@ class Game:
                         if result:
                             grenade = Grenade(result["x"], result["y"], result["angle"])
                             self.grenades.append(grenade)
+                    elif self.player.weapon.get("smoke_grenade", False):
+                        # Throw smoke grenade
+                        result = self.player.shoot()
+                        if result:
+                            smoke = SmokeGrenade(result["x"], result["y"], result["angle"])
+                            self.smoke_grenades.append(smoke)
                     elif self.player.weapon.get("melee", False):
                         # Knife melee attack
                         result = self.player.shoot()
@@ -4502,7 +5556,7 @@ class Game:
                 # On desktop: use mouse click
                 should_shoot = pygame.mouse.get_pressed()[0]
 
-            if should_shoot and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False):
+            if should_shoot and not self.player.weapon.get("melee", False) and not self.player.weapon.get("grenade", False) and not self.player.weapon.get("smoke_grenade", False):
                 result = self.player.shoot()
                 if result:
                     self.bullets.append(result)
@@ -4720,6 +5774,10 @@ class Game:
             pass
 
     def update(self):
+        # Check for pending cloud login
+        if self.cloud_login_pending:
+            self.check_cloud_login()
+
         # Handle waiting state for online multiplayer
         if self.state == "waiting":
             self.update_online_connection()
@@ -5043,6 +6101,22 @@ class Game:
             if explosion.is_done():
                 self.explosions.remove(explosion)
 
+        # Update smoke grenades
+        for smoke in self.smoke_grenades[:]:
+            smoke.update()
+            if smoke.should_pop():
+                # Create smoke cloud
+                cloud = SmokeCloud(smoke.x, smoke.y)
+                self.smoke_clouds.append(cloud)
+                smoke.popped = True
+                self.smoke_grenades.remove(smoke)
+
+        # Update smoke clouds
+        for cloud in self.smoke_clouds[:]:
+            cloud.update()
+            if cloud.is_done():
+                self.smoke_clouds.remove(cloud)
+
         # Update robots
         for robot in self.robots:
             # In co-op, robots target the nearest player
@@ -5077,16 +6151,39 @@ class Game:
                             self.state = "gameover"
                             self.stop_music()
             elif robot.can_shoot():
-                # Shoot at nearest player
-                result = robot.shoot(target_x, target_y)
-                # Handle single bullet or list of bullets (dual pistol bots)
-                if isinstance(result, list):
-                    for bullet in result:
-                        bullet.damage = DIFFICULTY[self.difficulty]["damage"]
-                    self.bullets.extend(result)
-                else:
-                    result.damage = DIFFICULTY[self.difficulty]["damage"]
-                    self.bullets.append(result)
+                # Check if smoke is blocking line of sight to target
+                can_see_target = True
+                for cloud in self.smoke_clouds:
+                    # Check if smoke cloud is between robot and target
+                    if cloud.point_in_smoke(target_x, target_y) or cloud.point_in_smoke(robot.x, robot.y):
+                        can_see_target = False
+                        break
+                    # Check if line from robot to target passes through smoke
+                    # Simple check: if smoke center is close to line between robot and target
+                    dx = target_x - robot.x
+                    dy = target_y - robot.y
+                    dist_to_target = math.sqrt(dx*dx + dy*dy)
+                    if dist_to_target > 0:
+                        # Project cloud center onto line
+                        t = max(0, min(1, ((cloud.x - robot.x) * dx + (cloud.y - robot.y) * dy) / (dist_to_target * dist_to_target)))
+                        closest_x = robot.x + t * dx
+                        closest_y = robot.y + t * dy
+                        dist_to_line = math.sqrt((cloud.x - closest_x)**2 + (cloud.y - closest_y)**2)
+                        if dist_to_line < cloud.radius * 0.8:  # If line passes through smoke
+                            can_see_target = False
+                            break
+
+                if can_see_target:
+                    # Shoot at nearest player
+                    result = robot.shoot(target_x, target_y)
+                    # Handle single bullet or list of bullets (dual pistol bots)
+                    if isinstance(result, list):
+                        for bullet in result:
+                            bullet.damage = DIFFICULTY[self.difficulty]["damage"]
+                        self.bullets.extend(result)
+                    else:
+                        result.damage = DIFFICULTY[self.difficulty]["damage"]
+                        self.bullets.append(result)
 
         # Update boss (impossible mode)
         if self.boss:
@@ -5197,6 +6294,14 @@ class Game:
         # Draw grenades
         for grenade in self.grenades:
             grenade.draw(surface, camera)
+
+        # Draw smoke grenades
+        for smoke in self.smoke_grenades:
+            smoke.draw(surface, camera)
+
+        # Draw smoke clouds (behind explosions but in front of grenades)
+        for cloud in self.smoke_clouds:
+            cloud.draw(surface, camera)
 
         # Draw explosions
         for explosion in self.explosions:
@@ -6118,9 +7223,123 @@ class Game:
         self.screen.blit(text, (col2_x, item_y))
         self.screen.blit(desc, (col2_x, item_y + 20))
 
+        # Avatar shop link
+        avatar_text = self.font.render("[A] Avatar Shop", True, (150, 200, 255))
+        self.screen.blit(avatar_text, (box_x + 30, box_y + box_height - 45))
+
         # Close option
         close_text = self.font.render("[ESC] Close Shop", True, RED)
-        self.screen.blit(close_text, (SCREEN_WIDTH // 2 - close_text.get_width() // 2, box_y + box_height - 40))
+        self.screen.blit(close_text, (SCREEN_WIDTH // 2 - close_text.get_width() // 2 + 100, box_y + box_height - 45))
+
+    def draw_avatar_shop(self):
+        """Draw the avatar shop screen"""
+        # Darken screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(200)
+        self.screen.blit(overlay, (0, 0))
+
+        # Shop box
+        box_width = 900
+        box_height = 550
+        box_x = SCREEN_WIDTH // 2 - box_width // 2
+        box_y = SCREEN_HEIGHT // 2 - box_height // 2
+
+        pygame.draw.rect(self.screen, DARK_GRAY, (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, (150, 200, 255), (box_x, box_y, box_width, box_height), 4)
+
+        # Title
+        title = self.big_font.render("AVATAR SHOP", True, (150, 200, 255))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, box_y + 15))
+
+        # Coins
+        coins = self.font.render(f"Your Coins: {self.player.coins}", True, GREEN)
+        self.screen.blit(coins, (SCREEN_WIDTH // 2 - coins.get_width() // 2, box_y + 60))
+
+        # Get avatar list
+        avatar_keys = list(AVATAR_TYPES.keys())
+        selected_type = avatar_keys[self.selected_avatar_index]
+        selected_data = AVATAR_TYPES[selected_type]
+
+        # Avatar preview area (large, centered)
+        preview_x = SCREEN_WIDTH // 2
+        preview_y = box_y + 180
+
+        # Create a temporary avatar to draw preview
+        preview_avatar = Avatar(selected_type)
+
+        # Animate preview avatar
+        anim_angle = math.sin(pygame.time.get_ticks() * 0.002) * 0.5
+        preview_avatar.draw(self.screen, preview_x, preview_y, anim_angle,
+                           walk_speed=2, anim_timer=pygame.time.get_ticks() // 16)
+
+        # Draw preview hands holding a rifle
+        preview_avatar.draw_holding_hands(self.screen, preview_x, preview_y, anim_angle,
+                                         "Rifle", is_reloading=False, reload_phase=0)
+
+        # Avatar name and info
+        name_text = self.big_font.render(selected_data["name"], True, WHITE)
+        self.screen.blit(name_text, (SCREEN_WIDTH // 2 - name_text.get_width() // 2, preview_y + 60))
+
+        # Description
+        desc_text = self.small_font.render(selected_data["description"], True, (200, 200, 200))
+        self.screen.blit(desc_text, (SCREEN_WIDTH // 2 - desc_text.get_width() // 2, preview_y + 100))
+
+        # Price / Owned status
+        if selected_type in self.player.owned_avatars:
+            if self.player.avatar_type == selected_type:
+                status_text = self.font.render("EQUIPPED", True, GREEN)
+            else:
+                status_text = self.font.render("OWNED - Press ENTER to Equip", True, (100, 255, 100))
+        else:
+            price = selected_data["price"]
+            color = GREEN if self.player.coins >= price else RED
+            status_text = self.font.render(f"Price: {price} coins - Press ENTER to Buy", True, color)
+        self.screen.blit(status_text, (SCREEN_WIDTH // 2 - status_text.get_width() // 2, preview_y + 135))
+
+        # Navigation arrows and avatar carousel
+        arrow_y = preview_y
+        left_arrow = self.big_font.render("<", True, WHITE)
+        right_arrow = self.big_font.render(">", True, WHITE)
+        self.screen.blit(left_arrow, (box_x + 50, arrow_y - 20))
+        self.screen.blit(right_arrow, (box_x + box_width - 80, arrow_y - 20))
+
+        # Show mini previews of adjacent avatars
+        for offset in [-2, -1, 1, 2]:
+            idx = (self.selected_avatar_index + offset) % len(avatar_keys)
+            mini_type = avatar_keys[idx]
+            mini_data = AVATAR_TYPES[mini_type]
+
+            # Position based on offset
+            mini_x = preview_x + offset * 120
+            mini_y = preview_y
+
+            # Draw mini avatar (smaller scale indicated by position)
+            mini_avatar = Avatar(mini_type)
+            mini_avatar.head_radius = 5
+            mini_avatar.torso_width = 9
+            mini_avatar.torso_height = 8
+            mini_avatar.arm_length = 8
+            mini_avatar.leg_length = 7
+            mini_avatar.hand_radius = 3
+
+            # Dim non-selected avatars
+            if offset != 0:
+                mini_avatar.draw(self.screen, mini_x, mini_y, 0, anim_timer=0)
+
+                # Show owned indicator
+                if mini_type in self.owned_avatars:
+                    owned_dot = pygame.Surface((10, 10), pygame.SRCALPHA)
+                    pygame.draw.circle(owned_dot, GREEN, (5, 5), 5)
+                    self.screen.blit(owned_dot, (int(mini_x - 5), int(mini_y + 25)))
+
+        # Instructions
+        nav_text = self.small_font.render("LEFT/RIGHT: Browse | ENTER: Buy/Equip | ESC: Back to Weapons", True, (180, 180, 180))
+        self.screen.blit(nav_text, (SCREEN_WIDTH // 2 - nav_text.get_width() // 2, box_y + box_height - 35))
+
+        # Show avatar index
+        index_text = self.small_font.render(f"{self.selected_avatar_index + 1} / {len(avatar_keys)}", True, (150, 150, 150))
+        self.screen.blit(index_text, (SCREEN_WIDTH // 2 - index_text.get_width() // 2, box_y + box_height - 60))
 
     def draw(self):
         if self.state == "login":
@@ -6135,7 +7354,7 @@ class Game:
         elif self.state == "waiting":
             self.draw_waiting_screen()
 
-        elif self.state == "playing" or self.state == "gameover" or self.state == "shop":
+        elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
@@ -6181,6 +7400,14 @@ class Game:
                 # Draw grenades
                 for grenade in self.grenades:
                     grenade.draw(self.screen, self.camera)
+
+                # Draw smoke grenades
+                for smoke in self.smoke_grenades:
+                    smoke.draw(self.screen, self.camera)
+
+                # Draw smoke clouds
+                for cloud in self.smoke_clouds:
+                    cloud.draw(self.screen, self.camera)
 
                 # Draw explosions
                 for explosion in self.explosions:
@@ -6237,6 +7464,8 @@ class Game:
                 self.draw_gameover()
             elif self.state == "shop":
                 self.draw_shop()
+            elif self.state == "avatar_shop":
+                self.draw_avatar_shop()
 
         pygame.display.flip()
 
