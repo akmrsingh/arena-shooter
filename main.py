@@ -4611,6 +4611,10 @@ class Game:
         self.big_font = pygame.font.Font(None, 72)
         self.small_font = pygame.font.Font(None, 32)
 
+        # HUD text cache to avoid render() calls every frame
+        self._hud_cache = {}
+        self._hud_cache_keys = {}
+
         self.state = "login"  # login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
         self.difficulty = "medium"
         self.game_mode = "solo"  # "solo", "pvp", "coop", "online_coop", "online_pvp"
@@ -6663,16 +6667,16 @@ class Game:
 
         # Big player label at top center of each half
         if is_player1:
-            title = self.font.render("PLAYER 1", True, LIGHT_BLUE)
+            title = self._cached_text("split_p1_title", "PLAYER 1", self.font, LIGHT_BLUE)
         else:
-            title = self.font.render("PLAYER 2", True, (100, 150, 255))
+            title = self._cached_text("split_p2_title", "PLAYER 2", self.font, (100, 150, 255))
         surface.blit(title, (width // 2 - title.get_width() // 2, 5))
 
         # Small P1/P2 label next to health bar
         if is_player1:
-            label = self.small_font.render("P1", True, LIGHT_BLUE)
+            label = self._cached_text("split_p1_label", "P1", self.small_font, LIGHT_BLUE)
         else:
-            label = self.small_font.render("P2", True, (100, 150, 255))
+            label = self._cached_text("split_p2_label", "P2", self.small_font, (100, 150, 255))
         surface.blit(label, (bar_x, bar_y - 5))
 
         # Health bar
@@ -6682,12 +6686,14 @@ class Game:
         pygame.draw.rect(surface, health_color, (bar_x + 30, bar_y, health_width, bar_height))
         pygame.draw.rect(surface, WHITE, (bar_x + 30, bar_y, bar_width, bar_height), 2)
 
-        hp_text = self.small_font.render(f"{int(max(0, player.health))}", True, WHITE)
+        cache_key = "split_p1_hp" if is_player1 else "split_p2_hp"
+        hp_text = self._cached_text(cache_key, f"{int(max(0, player.health))}", self.small_font, WHITE)
         surface.blit(hp_text, (bar_x + 35, bar_y + 2))
 
         # Weapon info
         weapon_name = player.weapon["name"]
-        weapon_text = self.small_font.render(f"{weapon_name}: {player.ammo}", True, player.weapon["color"])
+        cache_key = "split_p1_weapon" if is_player1 else "split_p2_weapon"
+        weapon_text = self._cached_text(cache_key, f"{weapon_name}: {player.ammo}", self.small_font, player.weapon["color"])
         surface.blit(weapon_text, (bar_x, bar_y + 28))
 
     def draw_minimap(self):
@@ -6744,6 +6750,14 @@ class Game:
         ch = int(SCREEN_HEIGHT * scale)
         pygame.draw.rect(self.screen, WHITE, (cx, cy, cw, ch), 1)
 
+    def _cached_text(self, cache_key, text, font, color):
+        """Get cached text surface, only re-render if text/color changed"""
+        key = (text, color)
+        if cache_key not in self._hud_cache or self._hud_cache_keys.get(cache_key) != key:
+            self._hud_cache[cache_key] = font.render(text, True, color)
+            self._hud_cache_keys[cache_key] = key
+        return self._hud_cache[cache_key]
+
     def draw_hud(self):
         # Player 1 Health bar
         bar_width = 250
@@ -6753,7 +6767,7 @@ class Game:
 
         # P1 label in multiplayer
         if self.player2:
-            p1_label = self.small_font.render("P1", True, LIGHT_BLUE)
+            p1_label = self._cached_text("p1_label", "P1", self.small_font, LIGHT_BLUE)
             self.screen.blit(p1_label, (bar_x, bar_y - 18))
 
         pygame.draw.rect(self.screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
@@ -6762,7 +6776,7 @@ class Game:
         pygame.draw.rect(self.screen, health_color, (bar_x, bar_y, health_width, bar_height))
         pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
 
-        hp_text = self.small_font.render(f"HP: {int(max(0, self.player.health))}", True, WHITE)
+        hp_text = self._cached_text("hp", f"HP: {int(max(0, self.player.health))}", self.small_font, WHITE)
         self.screen.blit(hp_text, (bar_x + 5, bar_y + 3))
 
         # Player 2 Health bar (in multiplayer modes)
@@ -6770,7 +6784,7 @@ class Game:
             p2_bar_x = SCREEN_WIDTH - bar_width - 20
             p2_bar_y = 20
 
-            p2_label = self.small_font.render("P2", True, (255, 150, 150))
+            p2_label = self._cached_text("p2_label", "P2", self.small_font, (255, 150, 150))
             self.screen.blit(p2_label, (p2_bar_x, p2_bar_y - 18))
 
             pygame.draw.rect(self.screen, DARK_GRAY, (p2_bar_x, p2_bar_y, bar_width, bar_height))
@@ -6779,11 +6793,11 @@ class Game:
             pygame.draw.rect(self.screen, p2_health_color, (p2_bar_x, p2_bar_y, p2_health_width, bar_height))
             pygame.draw.rect(self.screen, (255, 200, 200), (p2_bar_x, p2_bar_y, bar_width, bar_height), 2)
 
-            p2_hp_text = self.small_font.render(f"HP: {int(max(0, self.player2.health))}", True, WHITE)
+            p2_hp_text = self._cached_text("p2_hp", f"HP: {int(max(0, self.player2.health))}", self.small_font, WHITE)
             self.screen.blit(p2_hp_text, (p2_bar_x + 5, p2_bar_y + 3))
 
             # P2 weapon info
-            p2_weapon_text = self.small_font.render(f"{self.player2.weapon['name']}: {self.player2.ammo}", True, (255, 150, 150))
+            p2_weapon_text = self._cached_text("p2_weapon", f"{self.player2.weapon['name']}: {self.player2.ammo}", self.small_font, (255, 150, 150))
             self.screen.blit(p2_weapon_text, (p2_bar_x, p2_bar_y + 30))
 
         # Weapon and Ammo with reloads on the right
@@ -6799,87 +6813,76 @@ class Game:
         else:
             reload_str = str(reloads)
 
-        weapon_text = self.font.render(f"{weapon_name}: {self.player.ammo}/{self.player.max_ammo}", True, weapon_color)
+        weapon_text = self._cached_text("weapon", f"{weapon_name}: {self.player.ammo}/{self.player.max_ammo}", self.font, weapon_color)
         self.screen.blit(weapon_text, (20, 55))
 
         # Reloads display on the right of ammo
         reload_color = GREEN if reloads > 2 or self.player.weapon.get("melee", False) else YELLOW if reloads > 0 else RED
-        reload_text = self.small_font.render(f"[{reload_str}]", True, reload_color)
+        reload_text = self._cached_text("reloads", f"[{reload_str}]", self.small_font, reload_color)
         self.screen.blit(reload_text, (20 + weapon_text.get_width() + 10, 60))
 
         # Switch weapon hint
-        switch_text = self.small_font.render("[Q] Switch Weapon", True, GRAY)
+        switch_text = self._cached_text("switch", "[Q] Switch", self.small_font, GRAY)
         self.screen.blit(switch_text, (20, 95))
 
         # Coins display (top right corner)
         coin_color = YELLOW if self.player.coins < 10 else GREEN
-        coin_text = self.font.render(f"Coins: {self.player.coins}", True, coin_color)
+        coin_text = self._cached_text("coins", f"Coins: {self.player.coins}", self.font, coin_color)
         self.screen.blit(coin_text, (SCREEN_WIDTH - 220 - coin_text.get_width()//2, 230))
 
         # Shotgun status
-        if self.player.has_shotgun:
-            shotgun_text = self.small_font.render("Shotgun Unlocked!", True, GREEN)
-        else:
-            shotgun_text = self.small_font.render(f"Shotgun: 10 coins needed", True, GRAY)
+        shotgun_txt = "Shotgun OK" if self.player.has_shotgun else "Shotgun: 10"
+        shotgun_color = GREEN if self.player.has_shotgun else GRAY
+        shotgun_text = self._cached_text("shotgun", shotgun_txt, self.small_font, shotgun_color)
         self.screen.blit(shotgun_text, (SCREEN_WIDTH - 220 - shotgun_text.get_width()//2, 265))
 
         # RPG status
-        if self.player.has_rpg:
-            rpg_text = self.small_font.render("RPG Unlocked!", True, GREEN)
-        else:
-            rpg_text = self.small_font.render(f"RPG: 50 coins needed", True, GRAY)
+        rpg_txt = "RPG OK" if self.player.has_rpg else "RPG: 50"
+        rpg_color = GREEN if self.player.has_rpg else GRAY
+        rpg_text = self._cached_text("rpg", rpg_txt, self.small_font, rpg_color)
         self.screen.blit(rpg_text, (SCREEN_WIDTH - 220 - rpg_text.get_width()//2, 290))
 
         # Medkit charges
         medkit_color = GREEN if self.player.medkit_charges > 0 else GRAY
-        medkit_text = self.small_font.render(f"Medkits: {self.player.medkit_charges} [H]", True, medkit_color)
+        medkit_text = self._cached_text("medkit", f"Med: {self.player.medkit_charges} [H]", self.small_font, medkit_color)
         self.screen.blit(medkit_text, (SCREEN_WIDTH - 220 - medkit_text.get_width()//2, 315))
 
         # Score and kills
-        score_text = self.small_font.render(f"Score: {self.score} | Kills: {self.kills}", True, YELLOW)
+        score_text = self._cached_text("score", f"Score: {self.score} | K: {self.kills}", self.small_font, YELLOW)
         self.screen.blit(score_text, (20, SCREEN_HEIGHT - 40))
 
         # Robots remaining
-        robots_text = self.small_font.render(f"Robots: {len(self.robots)}", True, ORANGE)
+        robots_text = self._cached_text("robots", f"Bots: {len(self.robots)}", self.small_font, ORANGE)
         self.screen.blit(robots_text, (20, SCREEN_HEIGHT - 70))
 
         # Wave info for impossible mode
         if self.difficulty == "impossible":
-            wave_text = self.font.render(f"Wave {self.current_wave}/{self.max_waves}", True, (150, 0, 150))
+            wave_text = self._cached_text("wave", f"Wave {self.current_wave}/{self.max_waves}", self.font, (150, 0, 150))
             self.screen.blit(wave_text, (SCREEN_WIDTH // 2 - wave_text.get_width() // 2, 10))
 
             # Wave complete message
             if len(self.robots) == 0 and self.boss is None and self.current_wave < self.max_waves:
-                next_wave_text = self.font.render("Wave Complete! Next wave incoming...", True, GREEN)
+                next_wave_text = self._cached_text("wave_complete", "Wave Complete!", self.font, GREEN)
                 self.screen.blit(next_wave_text, (SCREEN_WIDTH // 2 - next_wave_text.get_width() // 2, 130))
 
-        # Show game mode and difficulty for online co-op
-        if self.game_mode == "online_coop":
-            mode_color = (100, 200, 255)  # Light blue for online
-            diff_display = self.online_difficulty.upper() if hasattr(self, 'online_difficulty') else self.difficulty.upper()
-            mode_text = self.small_font.render(f"ONLINE CO-OP | {diff_display}", True, mode_color)
-            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
-        elif self.game_mode == "online_pvp":
-            mode_color = (255, 100, 100)  # Light red for PvP
-            mode_text = self.small_font.render("ONLINE PVP", True, mode_color)
-            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
-        elif self.game_mode == "coop":
-            mode_color = (100, 255, 100)  # Light green for local co-op
-            mode_text = self.small_font.render(f"LOCAL CO-OP | {self.difficulty.upper()}", True, mode_color)
-            self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
-        elif self.game_mode == "pvp":
-            mode_color = (255, 150, 100)  # Orange for local PvP
-            mode_text = self.small_font.render("LOCAL PVP", True, mode_color)
+        # Show game mode (simplified)
+        if self.game_mode in ["online_coop", "online_pvp", "coop", "pvp"]:
+            mode_map = {"online_coop": ("ONLINE CO-OP", (100, 200, 255)),
+                       "online_pvp": ("ONLINE PVP", (255, 100, 100)),
+                       "coop": ("LOCAL CO-OP", (100, 255, 100)),
+                       "pvp": ("LOCAL PVP", (255, 150, 100))}
+            mode_txt, mode_color = mode_map[self.game_mode]
+            mode_text = self._cached_text("mode", mode_txt, self.small_font, mode_color)
             self.screen.blit(mode_text, (SCREEN_WIDTH // 2 - mode_text.get_width() // 2, 50))
 
         # Reload hint
         if self.player.ammo == 0:
-            reload_text = self.font.render("Press R to Reload!", True, RED)
-            self.screen.blit(reload_text, (SCREEN_WIDTH // 2 - reload_text.get_width() // 2, 100))
+            reload_hint = self._cached_text("reload_hint", "Press R to Reload!", self.font, RED)
+            self.screen.blit(reload_hint, (SCREEN_WIDTH // 2 - reload_hint.get_width() // 2, 100))
 
         # Save message
         if self.show_save_message > 0:
-            save_text = self.font.render("Game Saved!", True, GREEN)
+            save_text = self._cached_text("saved", "Game Saved!", self.font, GREEN)
             self.screen.blit(save_text, (SCREEN_WIDTH // 2 - save_text.get_width() // 2, 140))
             self.show_save_message -= 1
 
@@ -6894,7 +6897,7 @@ class Game:
         pygame.draw.rect(self.screen, YELLOW, self.shop_btn_rect, 3)
 
         # "SHOP" text above cart
-        shop_label = self.small_font.render("SHOP", True, YELLOW)
+        shop_label = self._cached_text("shop_label", "SHOP", self.small_font, YELLOW)
         self.screen.blit(shop_label, (shop_btn_x + shop_btn_width // 2 - shop_label.get_width() // 2, shop_btn_y + 5))
 
         # Draw shopping cart icon
