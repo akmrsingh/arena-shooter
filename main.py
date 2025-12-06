@@ -1979,14 +1979,14 @@ class SmokeCloud:
         self.particles = []
         self.expanding = True
 
-        # Create smoke particles - use fewer particles for performance
-        for _ in range(15):
+        # Create smoke particles - use very few particles for web performance
+        for _ in range(8):
             self.particles.append({
-                'offset_x': random.uniform(-50, 50),
-                'offset_y': random.uniform(-50, 50),
-                'size': random.randint(20, 40),
-                'drift_x': random.uniform(-0.3, 0.3),
-                'drift_y': random.uniform(-0.5, -0.1),  # Smoke rises
+                'offset_x': random.uniform(-40, 40),
+                'offset_y': random.uniform(-40, 40),
+                'size': random.randint(25, 45),
+                'drift_x': random.uniform(-0.2, 0.2),
+                'drift_y': random.uniform(-0.3, -0.1),  # Smoke rises
                 'gray': random.randint(140, 180)  # Pre-compute gray value
             })
 
@@ -2012,9 +2012,10 @@ class SmokeCloud:
         return self.lifetime <= 0
 
     def point_in_smoke(self, x, y):
-        """Check if a point is inside the smoke cloud"""
-        dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
-        return dist < self.radius
+        """Check if a point is inside the smoke cloud - optimized without sqrt"""
+        dx = x - self.x
+        dy = y - self.y
+        return (dx * dx + dy * dy) < (self.radius * self.radius)
 
     def draw(self, screen, camera):
         sx, sy = camera.apply(self.x, self.y)
@@ -6384,27 +6385,13 @@ class Game:
                             self.state = "gameover"
                             self.stop_music()
             elif robot.can_shoot():
-                # Check if smoke is blocking line of sight to target
+                # Check if smoke is blocking line of sight - simplified for performance
                 can_see_target = True
                 for cloud in self.smoke_clouds:
-                    # Check if smoke cloud is between robot and target
+                    # Just check if target or robot is in smoke (skip expensive line check)
                     if cloud.point_in_smoke(target_x, target_y) or cloud.point_in_smoke(robot.x, robot.y):
                         can_see_target = False
                         break
-                    # Check if line from robot to target passes through smoke
-                    # Simple check: if smoke center is close to line between robot and target
-                    dx = target_x - robot.x
-                    dy = target_y - robot.y
-                    dist_to_target = math.sqrt(dx*dx + dy*dy)
-                    if dist_to_target > 0:
-                        # Project cloud center onto line
-                        t = max(0, min(1, ((cloud.x - robot.x) * dx + (cloud.y - robot.y) * dy) / (dist_to_target * dist_to_target)))
-                        closest_x = robot.x + t * dx
-                        closest_y = robot.y + t * dy
-                        dist_to_line = math.sqrt((cloud.x - closest_x)**2 + (cloud.y - closest_y)**2)
-                        if dist_to_line < cloud.radius * 0.8:  # If line passes through smoke
-                            can_see_target = False
-                            break
 
                 if can_see_target:
                     # Shoot at nearest player
