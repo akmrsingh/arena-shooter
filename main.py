@@ -6151,6 +6151,10 @@ class Game:
             pass
 
     def update(self):
+        # ULTRA MINIMAL TEST: Return immediately to see if update() is the issue
+        if self.state == "playing":
+            return
+
         # Deferred game start (avoids freeze in event handler)
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
