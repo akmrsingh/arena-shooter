@@ -4648,7 +4648,7 @@ class Game:
         self._hud_cache = {}
         self._hud_cache_keys = {}
 
-        self.state = "login"  # login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
+        self.state = "menu"  # TEMP: Skip login for testing - login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
         self.difficulty = "medium"
         self.game_mode = "solo"  # "solo", "pvp", "coop", "online_coop", "online_pvp"
         self.selected_map = "random"  # Map selection: random, arena, corridors, fortress, open
@@ -7906,12 +7906,22 @@ class Game:
 
     async def run(self):
         running = True
+        frame_count = 0
         while running:
             running = self.handle_events()
             self.update()
             self.draw()
             self.clock.tick(60)
             await asyncio.sleep(0)  # Required for Pygbag
+
+            # DEBUG: Auto-start game after 3 seconds (180 frames)
+            frame_count += 1
+            if frame_count == 180 and self.state == "menu":
+                print("DEBUG: Auto-starting game after 3 seconds")
+                self.game_mode = "solo"
+                self.difficulty = "easy"
+                self.state = "playing"
+                print(f"DEBUG: State changed to '{self.state}'")
 
         pygame.quit()
 
