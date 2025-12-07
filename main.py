@@ -6174,6 +6174,15 @@ class Game:
         if self.state != "playing":
             return
 
+        # Minimal update - just player movement, no robots/bullets/etc
+        keys = pygame.key.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Update player movement only
+        self.player.update(keys, mouse_pos, self.obstacles, self.camera)
+        self.camera.follow(self.player)
+        return  # Skip rest of update logic for now
+
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
@@ -7766,6 +7775,13 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
+            # Minimal rendering - just background and player to test
+            self.draw_background()
+            self.player.draw(self.screen, self.camera)
+            self.draw_hud()
+            # Skip the rest of drawing for now
+
+        if False:  # Temporarily disabled - full rendering
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
