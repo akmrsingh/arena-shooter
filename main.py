@@ -5135,16 +5135,101 @@ class Game:
             self.cloud_login_pending = False
 
     def start_game(self, difficulty):
+        """Begin incremental game start - spreads init across frames to avoid freeze"""
         self.difficulty = difficulty
-        self.reset_game()
-        # In impossible mode, player gets 10000 health
-        if difficulty == "impossible":
-            self.player.health = 10000
-            self.player.max_health = 10000
-        # Only spawn robots in co-op/team modes (PvP is player vs player only)
-        if self.game_mode not in ["pvp", "online_pvp", "online_2v2", "online_2v1"]:
-            self.spawn_robots()
-        self.state = "playing"
+        self._init_stage = 0  # Track initialization progress
+        self._init_robots_spawned = 0
+        self.state = "loading"  # Show loading state
+
+    def _continue_init(self):
+        """Continue incremental initialization - called each frame during loading"""
+        if self._init_stage == 0:
+            # Stage 0: Clear lists and basic setup
+            self.pvp_winner = None
+            self.robots = []
+            self.bullets = []
+            self.grenades = []
+            self.smoke_grenades = []
+            self.smoke_clouds = []
+            self.explosions = []
+            self.obstacles = []
+            self.shell_casings = []
+            self.muzzle_flashes = []
+            self.healing_effects = []
+            self.score = 0
+            self.kills = 0
+            self.shop_prompted = False
+            self.show_save_message = 0
+            self.current_wave = 1
+            self.max_waves = 5
+            self.boss = None
+            self.wave_complete_timer = 0
+            self._init_stage = 1
+
+        elif self._init_stage == 1:
+            # Stage 1: Create player(s)
+            if self.game_mode == "solo":
+                self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+                self.player2 = None
+            elif self.game_mode == "pvp":
+                self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+            elif self.game_mode in ["coop", "online_coop"]:
+                self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
+                self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
+            else:
+                self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+                self.player2 = None
+
+            # Setup camera
+            if self.game_mode in ["pvp", "coop"]:
+                self.split_screen = True
+                half_width = SCREEN_WIDTH // 2
+                self.camera = Camera(half_width, SCREEN_HEIGHT)
+                self.camera2 = Camera(half_width, SCREEN_HEIGHT)
+            else:
+                self.split_screen = False
+                self.camera = Camera()
+                self.camera2 = Camera()
+
+            # Apply impossible mode health
+            if self.difficulty == "impossible":
+                self.player.health = 10000
+                self.player.max_health = 10000
+
+            self._init_stage = 2
+
+        elif self._init_stage == 2:
+            # Stage 2: Create obstacles
+            self.create_obstacles()
+            self.ensure_safe_spawn()
+            self._init_stage = 3
+
+        elif self._init_stage == 3:
+            # Stage 3: Spawn robots incrementally (3 per frame)
+            if self.game_mode in ["pvp", "online_pvp", "online_2v2", "online_2v1"]:
+                # PvP modes don't have robots
+                self._init_stage = 4
+            else:
+                settings = DIFFICULTY[self.difficulty]
+                total_count = settings["count"]
+
+                # Spawn 3 robots per frame
+                for _ in range(3):
+                    if self._init_robots_spawned < total_count:
+                        x = random.randint(100, MAP_WIDTH - 100)
+                        y = random.randint(100, MAP_HEIGHT - 100)
+                        bot_type = ["gun", "knife", "throwing_knife", "dual_pistol"][self._init_robots_spawned % 4]
+                        knife_only = (bot_type == "knife")
+                        self.robots.append(Robot(x, y, self.difficulty, knife_only=knife_only, bot_type=bot_type))
+                        self._init_robots_spawned += 1
+
+                if self._init_robots_spawned >= total_count:
+                    self._init_stage = 4
+
+        elif self._init_stage == 4:
+            # Stage 4: Done - start playing
+            self.state = "playing"
 
     def _precache_weapon_texts(self):
         """Pre-cache all weapon text renders to avoid stutters during gameplay"""
@@ -6135,6 +6220,11 @@ class Game:
             pass
 
     def update(self):
+        # Handle incremental loading state
+        if self.state == "loading":
+            self._continue_init()
+            return
+
         # Deferred game start (avoids freeze in event handler)
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
@@ -7747,6 +7837,16 @@ class Game:
 
         elif self.state == "waiting":
             self.draw_waiting_screen()
+
+        elif self.state == "loading":
+            # Simple loading screen
+            self.screen.fill((30, 30, 40))
+            loading_text = self.title_font.render("Loading...", True, WHITE)
+            self.screen.blit(loading_text, (SCREEN_WIDTH // 2 - loading_text.get_width() // 2, SCREEN_HEIGHT // 2 - 30))
+            # Show progress
+            stage = getattr(self, '_init_stage', 0)
+            progress_text = self.font.render(f"Stage {stage}/4", True, (150, 150, 150))
+            self.screen.blit(progress_text, (SCREEN_WIDTH // 2 - progress_text.get_width() // 2, SCREEN_HEIGHT // 2 + 30))
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
             if self.split_screen and self.player2:
