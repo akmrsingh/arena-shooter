@@ -6151,10 +6151,6 @@ class Game:
             pass
 
     def update(self):
-        # ULTRA MINIMAL TEST: Return immediately to see if update() is the issue
-        if self.state == "playing":
-            return
-
         # Deferred game start (avoids freeze in event handler)
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
@@ -6178,8 +6174,12 @@ class Game:
         if self.state != "playing":
             return
 
-        # Ultra minimal - no update at all
-        return
+        # TEST: Enable just player movement and camera
+        keys = pygame.key.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+        self.player.update(keys, mouse_pos, self.obstacles, self.camera)
+        self.camera.follow(self.player)
+        return  # Skip rest for now
 
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
@@ -7773,12 +7773,11 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # Ultra minimal - just fill screen, no function calls
-            self.screen.fill((30, 50, 30))  # Dark green
-            # Draw player position as text only
-            pos_text = self.font.render(f"Player: ({int(self.player.x)}, {int(self.player.y)})", True, (255, 255, 255))
-            self.screen.blit(pos_text, (50, 50))
-            # Skip all other drawing
+            # TEST: Enable background, player, and basic HUD
+            self.draw_background()
+            self.player.draw(self.screen, self.camera)
+            self.draw_hud()
+            # Skip obstacles, robots, bullets etc for now
 
         if False:  # Temporarily disabled - full rendering
             if self.split_screen and self.player2:
