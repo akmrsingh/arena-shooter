@@ -6611,9 +6611,6 @@ class Game:
         # Fill with floor color
         self.screen.fill(FLOOR_COLOR)
 
-        # TEST: Skip grid drawing to isolate freeze
-        return
-
         # Draw grid
         grid_size = 100
         for x in range(0, MAP_WIDTH, grid_size):
@@ -7772,9 +7769,10 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEST: Just draw_background() - nothing else
+            # TEST: background + grid + player
             self.draw_background()
-            # Skip player, HUD, obstacles, robots, bullets etc
+            self.player.draw(self.screen, self.camera)
+            # Skip HUD, obstacles, robots, bullets etc
 
         if False:  # Temporarily disabled - full rendering
             if self.split_screen and self.player2:
