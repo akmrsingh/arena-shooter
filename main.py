@@ -5533,36 +5533,40 @@ class Game:
                 elif self.state == "menu":
                     if event.key == pygame.K_1:
                         self.game_mode = "solo"
-                        self.start_game("easy")
+                        self.difficulty = "easy"
+                        self._need_start_game = True  # Defer to next frame
                     elif event.key == pygame.K_2:
                         self.game_mode = "solo"
-                        self.start_game("medium")
+                        self.difficulty = "medium"
+                        self._need_start_game = True
                     elif event.key == pygame.K_3:
                         self.game_mode = "solo"
-                        self.start_game("hard")
+                        self.difficulty = "hard"
+                        self._need_start_game = True
                     elif event.key == pygame.K_4:
                         self.game_mode = "solo"
-                        self.start_game("impossible")
+                        self.difficulty = "impossible"
+                        self._need_start_game = True
                     elif event.key == pygame.K_5:
-                        # PvP mode - 1v1 battle
                         self.game_mode = "pvp"
-                        self.start_game("pvp")
+                        self.difficulty = "pvp"
+                        self._need_start_game = True
                     elif event.key == pygame.K_6:
-                        # Co-op mode - easy
                         self.game_mode = "coop"
-                        self.start_game("easy")
+                        self.difficulty = "easy"
+                        self._need_start_game = True
                     elif event.key == pygame.K_7:
-                        # Co-op mode - medium
                         self.game_mode = "coop"
-                        self.start_game("medium")
+                        self.difficulty = "medium"
+                        self._need_start_game = True
                     elif event.key == pygame.K_8:
-                        # Co-op hard mode
                         self.game_mode = "coop"
-                        self.start_game("hard")
+                        self.difficulty = "hard"
+                        self._need_start_game = True
                     elif event.key == pygame.K_9:
-                        # Co-op impossible mode
                         self.game_mode = "coop"
-                        self.start_game("impossible")
+                        self.difficulty = "impossible"
+                        self._need_start_game = True
                     elif event.key == pygame.K_0:
                         # Online CO-OP menu
                         self.online_game_mode = "coop"
@@ -6131,6 +6135,12 @@ class Game:
             pass
 
     def update(self):
+        # Deferred game start (avoids freeze in event handler)
+        if getattr(self, '_need_start_game', False):
+            self._need_start_game = False
+            self.start_game(self.difficulty)
+            return
+
         # Check for pending cloud login
         if self.cloud_login_pending:
             self.check_cloud_login()
