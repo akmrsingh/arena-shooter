@@ -6165,6 +6165,9 @@ class Game:
         if self.state != "playing":
             return
 
+        # TEMP: Skip all update logic to test freeze
+        return
+
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
@@ -7756,6 +7759,12 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
+            # TEMP: Minimal draw to test freeze
+            self.screen.fill((50, 50, 50))
+            text = self.font.render("PLAYING", True, (255, 255, 255))
+            self.screen.blit(text, (100, 100))
+            return  # Skip all other drawing
+
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
