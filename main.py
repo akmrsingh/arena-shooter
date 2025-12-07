@@ -4874,29 +4874,12 @@ class Game:
 
     def create_obstacles(self):
         self.obstacles = []
-
-        # Border walls (always present)
+        # Just border walls - simplified for web performance
         wall_thickness = 50
         self.obstacles.append(Obstacle(0, 0, MAP_WIDTH, wall_thickness))  # Top
         self.obstacles.append(Obstacle(0, MAP_HEIGHT - wall_thickness, MAP_WIDTH, wall_thickness))  # Bottom
         self.obstacles.append(Obstacle(0, 0, wall_thickness, MAP_HEIGHT))  # Left
         self.obstacles.append(Obstacle(MAP_WIDTH - wall_thickness, 0, wall_thickness, MAP_HEIGHT))  # Right
-
-        # Create map based on selected map type
-        map_type = getattr(self, 'selected_map', 'random')
-
-        if map_type == 'random':
-            self.create_random_map()
-        elif map_type == 'arena':
-            self.create_arena_map()
-        elif map_type == 'corridors':
-            self.create_corridors_map()
-        elif map_type == 'fortress':
-            self.create_fortress_map()
-        elif map_type == 'open':
-            self.create_open_map()
-        else:
-            self.create_random_map()
 
     def create_random_map(self):
         """Original random obstacle placement"""
