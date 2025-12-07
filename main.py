@@ -5136,14 +5136,21 @@ class Game:
 
     def start_game(self, difficulty):
         self.difficulty = difficulty
-        self.reset_game()
-        # In impossible mode, player gets 10000 health
+        # Minimal setup - just clear robots and set position
+        self.robots = []
+        self.bullets = []
+        self.grenades = []
+        self.explosions = []
+        self.score = 0
+        self.kills = 0
+        # Reset player position
+        self.player.x = MAP_WIDTH // 2
+        self.player.y = MAP_HEIGHT // 2
+        self.player.health = 100
+        self.player.max_health = 100
         if difficulty == "impossible":
             self.player.health = 10000
             self.player.max_health = 10000
-        # Only spawn robots in co-op/team modes (PvP is player vs player only)
-        if self.game_mode not in ["pvp", "online_pvp", "online_2v2", "online_2v1"]:
-            self.spawn_robots()
         self.state = "playing"
 
     def _precache_weapon_texts(self):
