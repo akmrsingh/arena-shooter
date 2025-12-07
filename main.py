@@ -4648,7 +4648,7 @@ class Game:
         self._hud_cache = {}
         self._hud_cache_keys = {}
 
-        self.state = "menu"  # TEMP: Skip login for testing - login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
+        self.state = "login"  # login, menu, playing, gameover, shop, avatar_shop, online_menu, waiting
         self.difficulty = "medium"
         self.game_mode = "solo"  # "solo", "pvp", "coop", "online_coop", "online_pvp"
         self.selected_map = "random"  # Map selection: random, arena, corridors, fortress, open
@@ -5342,17 +5342,13 @@ class Game:
                     x, y = event.pos
 
                 # Check menu buttons
-                print(f"DEBUG: Touch at ({x}, {y}), checking {len(self.menu_buttons)} buttons")
                 for btn_name, btn_rect in self.menu_buttons.items():
                     if btn_rect and btn_rect.collidepoint(x, y):
-                        print(f"DEBUG: Button '{btn_name}' clicked!")
                         # Solo modes - direct state change (no function call)
                         if btn_name == "easy":
-                            print("DEBUG: Setting state to 'playing' (easy mode)")
                             self.game_mode = "solo"
                             self.difficulty = "easy"
                             self.state = "playing"
-                            print(f"DEBUG: State is now '{self.state}'")
                         elif btn_name == "medium":
                             self.game_mode = "solo"
                             self.difficulty = "medium"
@@ -5551,13 +5547,10 @@ class Game:
                                 self.passcode_input += char
 
                 elif self.state == "menu":
-                    print(f"DEBUG: Menu key pressed: {event.key}")
                     if event.key == pygame.K_1:
-                        print("DEBUG: K_1 pressed - starting easy mode")
                         self.game_mode = "solo"
                         self.difficulty = "easy"
-                        self.state = "playing"  # Direct state change - no function call
-                        print(f"DEBUG: State now '{self.state}'")
+                        self.state = "playing"
                     elif event.key == pygame.K_2:
                         self.game_mode = "solo"
                         self.difficulty = "medium"
@@ -7762,13 +7755,6 @@ class Game:
         self.screen.blit(index_text, (SCREEN_WIDTH // 2 - index_text.get_width() // 2, box_y + box_height - 60))
 
     def draw(self):
-        # Debug: print state once per second (every 60 frames)
-        if hasattr(self, '_draw_counter'):
-            self._draw_counter += 1
-        else:
-            self._draw_counter = 0
-        if self._draw_counter % 60 == 0:
-            print(f"DEBUG draw(): state='{self.state}'")
 
         if self.state == "login":
             self.draw_login_screen()
@@ -7783,13 +7769,14 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEMP: Minimal draw to test freeze
-            print(f"DEBUG: Drawing PLAYING state!")
+            # TEMP: Minimal draw to test freeze - DON'T return early, need pygame.display.flip()!
             self.screen.fill((50, 50, 50))
             text = self.font.render(f"PLAYING - {self.difficulty}", True, (255, 255, 255))
             self.screen.blit(text, (100, 100))
-            return  # Skip all other drawing
+            # Skip the complex drawing code below but still call pygame.display.flip() at end
 
+        # This code is skipped because we don't enter the if/elif below
+        if False and (self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop"):
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
@@ -7906,22 +7893,12 @@ class Game:
 
     async def run(self):
         running = True
-        frame_count = 0
         while running:
             running = self.handle_events()
             self.update()
             self.draw()
             self.clock.tick(60)
             await asyncio.sleep(0)  # Required for Pygbag
-
-            # DEBUG: Auto-start game after 3 seconds (180 frames)
-            frame_count += 1
-            if frame_count == 180 and self.state == "menu":
-                print("DEBUG: Auto-starting game after 3 seconds")
-                self.game_mode = "solo"
-                self.difficulty = "easy"
-                self.state = "playing"
-                print(f"DEBUG: State changed to '{self.state}'")
 
         pygame.quit()
 
