@@ -6611,6 +6611,9 @@ class Game:
         # Fill with floor color
         self.screen.fill(FLOOR_COLOR)
 
+        # TEST: Skip grid drawing to isolate freeze
+        return
+
         # Draw grid
         grid_size = 100
         for x in range(0, MAP_WIDTH, grid_size):
