@@ -5344,19 +5344,23 @@ class Game:
                 # Check menu buttons
                 for btn_name, btn_rect in self.menu_buttons.items():
                     if btn_rect and btn_rect.collidepoint(x, y):
-                        # Solo modes
+                        # Solo modes - direct state change (no function call)
                         if btn_name == "easy":
                             self.game_mode = "solo"
-                            self.start_game("easy")
+                            self.difficulty = "easy"
+                            self.state = "playing"
                         elif btn_name == "medium":
                             self.game_mode = "solo"
-                            self.start_game("medium")
+                            self.difficulty = "medium"
+                            self.state = "playing"
                         elif btn_name == "hard":
                             self.game_mode = "solo"
-                            self.start_game("hard")
+                            self.difficulty = "hard"
+                            self.state = "playing"
                         elif btn_name == "impossible":
                             self.game_mode = "solo"
-                            self.start_game("impossible")
+                            self.difficulty = "impossible"
+                            self.state = "playing"
                         # Online modes
                         elif btn_name == "online_coop":
                             self.online_game_mode = "coop"
@@ -5378,22 +5382,27 @@ class Game:
                             self.state = "online_menu"
                             self.online_input_code = ""
                             self.online_message = ""
-                        # Local multiplayer
+                        # Local multiplayer - direct state change
                         elif btn_name == "local_pvp":
                             self.game_mode = "pvp"
-                            self.start_game("pvp")
+                            self.difficulty = "pvp"
+                            self.state = "playing"
                         elif btn_name == "coop_easy":
                             self.game_mode = "coop"
-                            self.start_game("easy")
+                            self.difficulty = "easy"
+                            self.state = "playing"
                         elif btn_name == "coop_med":
                             self.game_mode = "coop"
-                            self.start_game("medium")
+                            self.difficulty = "medium"
+                            self.state = "playing"
                         elif btn_name == "coop_hard":
                             self.game_mode = "coop"
-                            self.start_game("hard")
+                            self.difficulty = "hard"
+                            self.state = "playing"
                         elif btn_name == "coop_imp":
                             self.game_mode = "coop"
-                            self.start_game("impossible")
+                            self.difficulty = "impossible"
+                            self.state = "playing"
                         # Map selection
                         elif btn_name == "map_left":
                             self.map_index = (self.map_index - 1) % len(self.map_names)
