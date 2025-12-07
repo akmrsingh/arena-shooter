@@ -6174,9 +6174,6 @@ class Game:
         if self.state != "playing":
             return
 
-        # TEMP: Skip all update logic to test freeze
-        return
-
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
@@ -7769,14 +7766,6 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEMP: Minimal draw to test freeze - DON'T return early, need pygame.display.flip()!
-            self.screen.fill((50, 50, 50))
-            text = self.font.render(f"PLAYING - {self.difficulty}", True, (255, 255, 255))
-            self.screen.blit(text, (100, 100))
-            # Skip the complex drawing code below but still call pygame.display.flip() at end
-
-        # This code is skipped because we don't enter the if/elif below
-        if False and (self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop"):
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
