@@ -5170,8 +5170,6 @@ class Game:
     def start_game(self, difficulty):
         self.difficulty = difficulty
         self.reset_game()
-        # Pre-cache all weapon texts to avoid stutters when switching weapons
-        self._precache_weapon_texts()
         # In impossible mode, player gets 10000 health
         if difficulty == "impossible":
             self.player.health = 10000
@@ -5180,7 +5178,6 @@ class Game:
         if self.game_mode not in ["pvp", "online_pvp", "online_2v2", "online_2v1"]:
             self.spawn_robots()
         self.state = "playing"
-        self.play_boss_music()
 
     def _precache_weapon_texts(self):
         """Pre-cache all weapon text renders to avoid stutters during gameplay"""
