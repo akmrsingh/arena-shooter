@@ -4452,6 +4452,23 @@ class Player:
             throw_y = hand_y + math.sin(angle) * 25
             pygame.draw.line(screen, (220, 220, 230), (int(hand_x + math.cos(angle) * 20), int(hand_y + math.sin(angle) * 20)), (int(throw_x), int(throw_y)), 3)
 
+    def reset_for_game(self, x, y):
+        """Reset player position and health for a new game without recreating object"""
+        self.x = x
+        self.y = y
+        self.health = 100
+        self.max_health = 100
+        self.hit_flash = 0
+        self.fire_cooldown = 0
+        self.recoil = 0
+        self.reloading = False
+        self.reload_timer = 0
+        self.current_weapon = 0
+        self.angle = 0
+        # Restore ammo for all weapons
+        for weapon in self.weapons:
+            weapon["ammo"] = weapon["max_ammo"]
+
 
 class Player2(Player):
     """Second player for PvP and Co-op modes - uses IJKL for movement, aims with numpad"""
@@ -5167,21 +5184,24 @@ class Game:
             self._init_stage = 1
 
         elif self._init_stage == 1:
-            # Stage 1: Create player(s)
+            # Stage 1: Reset existing player position (don't recreate)
+            # Player was already created in Game.__init__ via reset_game()
             if self.game_mode == "solo":
-                self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+                self.player.reset_for_game(MAP_WIDTH // 2, MAP_HEIGHT // 2)
                 self.player2 = None
             elif self.game_mode == "pvp":
-                self.player = Player(MAP_WIDTH // 4, MAP_HEIGHT // 2)
-                self.player2 = Player2(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                self.player.reset_for_game(MAP_WIDTH // 4, MAP_HEIGHT // 2)
+                if self.player2:
+                    self.player2.reset_for_game(3 * MAP_WIDTH // 4, MAP_HEIGHT // 2)
             elif self.game_mode in ["coop", "online_coop"]:
-                self.player = Player(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
-                self.player2 = Player2(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
+                self.player.reset_for_game(MAP_WIDTH // 2 - 100, MAP_HEIGHT // 2)
+                if self.player2:
+                    self.player2.reset_for_game(MAP_WIDTH // 2 + 100, MAP_HEIGHT // 2)
             else:
-                self.player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+                self.player.reset_for_game(MAP_WIDTH // 2, MAP_HEIGHT // 2)
                 self.player2 = None
 
-            # Setup camera
+            # Setup camera (these are lightweight)
             if self.game_mode in ["pvp", "coop"]:
                 self.split_screen = True
                 half_width = SCREEN_WIDTH // 2
