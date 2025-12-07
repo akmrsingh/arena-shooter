@@ -5021,49 +5021,16 @@ class Game:
     def spawn_robots(self):
         settings = DIFFICULTY[self.difficulty]
         self.robots = []
-
         total_count = settings["count"]
-        # Distribute bot types: 30% knife, 30% gun, 20% throwing knife, 20% dual pistol
-        knife_count = int(total_count * 0.3)
-        gun_count = int(total_count * 0.3)
-        throwing_knife_count = int(total_count * 0.2)
-        dual_pistol_count = total_count - knife_count - gun_count - throwing_knife_count
-        spawned = 0
 
+        # Simple spawn - just place robots at random positions far from player
         for i in range(total_count):
-            attempts = 0
-            while attempts < 50:
-                x = random.randint(100, MAP_WIDTH - 100)
-                y = random.randint(100, MAP_HEIGHT - 100)
-
-                # Not too close to player
-                dist_to_player = math.sqrt((x - self.player.x)**2 + (y - self.player.y)**2)
-                if dist_to_player > 400:
-                    # Check not inside obstacle
-                    valid = True
-                    for obs in self.obstacles:
-                        if obs.collides_circle(x, y, 25):
-                            valid = False
-                            break
-
-                    if valid:
-                        # Determine bot type based on spawn count
-                        if spawned < knife_count:
-                            # Knife-only melee bots
-                            self.robots.append(Robot(x, y, self.difficulty, knife_only=True, bot_type="knife"))
-                        elif spawned < knife_count + gun_count:
-                            # Regular gun bots
-                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="gun"))
-                        elif spawned < knife_count + gun_count + throwing_knife_count:
-                            # Throwing knife bots (ranged)
-                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="throwing_knife"))
-                        else:
-                            # Dual pistol bots (ranged)
-                            self.robots.append(Robot(x, y, self.difficulty, knife_only=False, bot_type="dual_pistol"))
-                        spawned += 1
-                        break
-
-                attempts += 1
+            x = random.randint(100, MAP_WIDTH - 100)
+            y = random.randint(100, MAP_HEIGHT - 100)
+            # Alternate bot types
+            bot_type = ["gun", "knife", "throwing_knife", "dual_pistol"][i % 4]
+            knife_only = (bot_type == "knife")
+            self.robots.append(Robot(x, y, self.difficulty, knife_only=knife_only, bot_type=bot_type))
 
     def spawn_boss(self):
         """Spawn the boss for impossible mode"""
