@@ -5342,13 +5342,17 @@ class Game:
                     x, y = event.pos
 
                 # Check menu buttons
+                print(f"DEBUG: Touch at ({x}, {y}), checking {len(self.menu_buttons)} buttons")
                 for btn_name, btn_rect in self.menu_buttons.items():
                     if btn_rect and btn_rect.collidepoint(x, y):
+                        print(f"DEBUG: Button '{btn_name}' clicked!")
                         # Solo modes - direct state change (no function call)
                         if btn_name == "easy":
+                            print("DEBUG: Setting state to 'playing' (easy mode)")
                             self.game_mode = "solo"
                             self.difficulty = "easy"
                             self.state = "playing"
+                            print(f"DEBUG: State is now '{self.state}'")
                         elif btn_name == "medium":
                             self.game_mode = "solo"
                             self.difficulty = "medium"
@@ -5547,10 +5551,13 @@ class Game:
                                 self.passcode_input += char
 
                 elif self.state == "menu":
+                    print(f"DEBUG: Menu key pressed: {event.key}")
                     if event.key == pygame.K_1:
+                        print("DEBUG: K_1 pressed - starting easy mode")
                         self.game_mode = "solo"
                         self.difficulty = "easy"
                         self.state = "playing"  # Direct state change - no function call
+                        print(f"DEBUG: State now '{self.state}'")
                     elif event.key == pygame.K_2:
                         self.game_mode = "solo"
                         self.difficulty = "medium"
@@ -7755,6 +7762,14 @@ class Game:
         self.screen.blit(index_text, (SCREEN_WIDTH // 2 - index_text.get_width() // 2, box_y + box_height - 60))
 
     def draw(self):
+        # Debug: print state once per second (every 60 frames)
+        if hasattr(self, '_draw_counter'):
+            self._draw_counter += 1
+        else:
+            self._draw_counter = 0
+        if self._draw_counter % 60 == 0:
+            print(f"DEBUG draw(): state='{self.state}'")
+
         if self.state == "login":
             self.draw_login_screen()
 
@@ -7769,8 +7784,9 @@ class Game:
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
             # TEMP: Minimal draw to test freeze
+            print(f"DEBUG: Drawing PLAYING state!")
             self.screen.fill((50, 50, 50))
-            text = self.font.render("PLAYING", True, (255, 255, 255))
+            text = self.font.render(f"PLAYING - {self.difficulty}", True, (255, 255, 255))
             self.screen.blit(text, (100, 100))
             return  # Skip all other drawing
 
