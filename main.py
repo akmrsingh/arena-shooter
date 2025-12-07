@@ -6174,12 +6174,8 @@ class Game:
         if self.state != "playing":
             return
 
-        # TEST: Enable just player movement and camera
-        keys = pygame.key.get_pressed()
-        mouse_pos = pygame.mouse.get_pos()
-        self.player.update(keys, mouse_pos, self.obstacles, self.camera)
-        self.camera.follow(self.player)
-        return  # Skip rest for now
+        # TEST: No update at all - return immediately
+        return
 
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
@@ -7773,11 +7769,9 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEST: Enable background, player, and basic HUD
+            # TEST: Just draw_background() - nothing else
             self.draw_background()
-            self.player.draw(self.screen, self.camera)
-            self.draw_hud()
-            # Skip obstacles, robots, bullets etc for now
+            # Skip player, HUD, obstacles, robots, bullets etc
 
         if False:  # Temporarily disabled - full rendering
             if self.split_screen and self.player2:
