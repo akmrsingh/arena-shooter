@@ -5541,39 +5541,39 @@ class Game:
                     if event.key == pygame.K_1:
                         self.game_mode = "solo"
                         self.difficulty = "easy"
-                        self._need_start_game = True  # Defer to next frame
+                        self.state = "playing"  # Direct state change - no function call
                     elif event.key == pygame.K_2:
                         self.game_mode = "solo"
                         self.difficulty = "medium"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_3:
                         self.game_mode = "solo"
                         self.difficulty = "hard"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_4:
                         self.game_mode = "solo"
                         self.difficulty = "impossible"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_5:
                         self.game_mode = "pvp"
                         self.difficulty = "pvp"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_6:
                         self.game_mode = "coop"
                         self.difficulty = "easy"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_7:
                         self.game_mode = "coop"
                         self.difficulty = "medium"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_8:
                         self.game_mode = "coop"
                         self.difficulty = "hard"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_9:
                         self.game_mode = "coop"
                         self.difficulty = "impossible"
-                        self._need_start_game = True
+                        self.state = "playing"
                     elif event.key == pygame.K_0:
                         # Online CO-OP menu
                         self.online_game_mode = "coop"
