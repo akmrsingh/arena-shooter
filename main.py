@@ -6248,6 +6248,9 @@ class Game:
         else:
             self.camera.update(self.player.x, self.player.y)
 
+        # TEST: Return after player + camera update
+        return
+
         # Update shell casings
         for casing in self.shell_casings[:]:
             if not casing.update():
