@@ -7769,11 +7769,12 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEST: background + grid + player + camera
+            # TEST: background + grid + player + camera + HUD
             self.camera.update(self.player.x, self.player.y)
             self.draw_background()
             self.player.draw(self.screen, self.camera)
-            # Skip HUD, obstacles, robots, bullets etc
+            self.draw_hud()
+            # Skip obstacles, robots, bullets etc
 
         if False:  # Temporarily disabled - full rendering
             if self.split_screen and self.player2:
