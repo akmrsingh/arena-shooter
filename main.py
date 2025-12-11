@@ -6177,7 +6177,8 @@ class Game:
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
-        # TEST: Just keys + mouse + camera, no player.update()
+        # TEST: Add player.update()
+        self.player.update(keys, mouse_pos, self.camera, self.obstacles)
         self.camera.update(self.player.x, self.player.y)
         return
 
