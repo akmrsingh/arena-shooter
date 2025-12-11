@@ -6177,9 +6177,20 @@ class Game:
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
-        # TEST: Add player.update()
+        # TEST: Add player.update() + bullets + robots
         self.player.update(keys, mouse_pos, self.camera, self.obstacles)
         self.camera.update(self.player.x, self.player.y)
+
+        # Update bullets
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if bullet.lifetime <= 0:
+                self.bullets.remove(bullet)
+
+        # Update robots
+        for robot in self.robots[:]:
+            robot.update(self.player, self.obstacles)
+
         return
 
         # Handle mobile joystick movement
