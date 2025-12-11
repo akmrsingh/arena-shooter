@@ -6174,6 +6174,10 @@ class Game:
         if self.state != "playing":
             return
 
+        # TEST: Skip all player update, just update camera
+        self.camera.update(self.player.x, self.player.y)
+        return
+
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
