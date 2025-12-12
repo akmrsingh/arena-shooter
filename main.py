@@ -6177,22 +6177,6 @@ class Game:
         keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
 
-        # TEST: Add player.update() + bullets + robots
-        self.player.update(keys, mouse_pos, self.camera, self.obstacles)
-        self.camera.update(self.player.x, self.player.y)
-
-        # Update bullets
-        for bullet in self.bullets[:]:
-            bullet.update()
-            if bullet.lifetime <= 0:
-                self.bullets.remove(bullet)
-
-        # Update robots
-        for robot in self.robots[:]:
-            robot.update(self.player, self.obstacles)
-
-        return
-
         # Handle mobile joystick movement
         if self.mobile_controls and self.joystick.active:
             # Use module-level FakeKeys class (faster than defining class inside function)
@@ -6263,9 +6247,6 @@ class Game:
             self.camera.update(mid_x, mid_y)
         else:
             self.camera.update(self.player.x, self.player.y)
-
-        # TEST: Return after player + camera update
-        return
 
         # Update shell casings
         for casing in self.shell_casings[:]:
