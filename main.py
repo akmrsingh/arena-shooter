@@ -6263,7 +6263,20 @@ class Game:
             if not effect.update(self.player.x, self.player.y):
                 self.healing_effects.remove(effect)
 
-        # Update bullets
+        # Update bullets (simple - no collision)
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if bullet.lifetime <= 0:
+                self.bullets.remove(bullet)
+
+        # Update robots (simple - no collision)
+        for robot in self.robots[:]:
+            robot.update(self.player, self.obstacles)
+
+        # TEST: Return before complex collision detection
+        return
+
+        # Update bullets (FULL - with collision)
         for bullet in self.bullets[:]:
             bullet.update()
 
