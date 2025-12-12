@@ -6151,6 +6151,9 @@ class Game:
             pass
 
     def update(self):
+        # TEST: Skip ALL update logic
+        return
+
         # Deferred game start (avoids freeze in event handler)
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
