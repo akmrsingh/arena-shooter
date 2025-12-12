@@ -6151,28 +6151,24 @@ class Game:
             pass
 
     def update(self):
-        # TEST: Skip ALL update logic
-        return
-
         # Deferred game start (avoids freeze in event handler)
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
             self.start_game(self.difficulty)
             return
 
-        # Check for pending cloud login
-        if self.cloud_login_pending:
-            self.check_cloud_login()
+        # TEST: Skip cloud login check (may be causing freeze)
+        # if self.cloud_login_pending:
+        #     self.check_cloud_login()
 
-        # Handle waiting state for online multiplayer
-        if self.state == "waiting":
-            self.update_online_connection()
-            return
+        # TEST: Skip online multiplayer (may be causing freeze)
+        # if self.state == "waiting":
+        #     self.update_online_connection()
+        #     return
 
-        # Handle online multiplayer sync (even during gameover to sync winner/loser)
-        if self.game_mode in ["online_coop", "online_pvp", "online_2v2", "online_2v1"]:
-            self.send_game_state()
-            self.receive_game_state()
+        # if self.game_mode in ["online_coop", "online_pvp", "online_2v2", "online_2v1"]:
+        #     self.send_game_state()
+        #     self.receive_game_state()
 
         if self.state != "playing":
             return
