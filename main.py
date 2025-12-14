@@ -2825,6 +2825,61 @@ class MuzzleFlash:
             pygame.draw.line(screen, (255, 200, 100), (sx, sy), (spark_x, spark_y), 2)
 
 
+class Pickup:
+    """Collectible items: health packs and ammo boxes"""
+    def __init__(self, x, y, pickup_type="health"):
+        self.x = x
+        self.y = y
+        self.type = pickup_type  # "health" or "ammo"
+        self.radius = 15
+        self.bob_offset = random.uniform(0, math.pi * 2)  # For floating animation
+        self.lifetime = 600  # 10 seconds at 60 FPS
+
+    def update(self):
+        self.lifetime -= 1
+        self.bob_offset += 0.1
+        return self.lifetime > 0
+
+    def collect(self, player):
+        """Apply pickup effect to player"""
+        if self.type == "health":
+            heal_amount = 25
+            player.health = min(player.health + heal_amount, player.max_health)
+            return True
+        elif self.type == "ammo":
+            # Refill current weapon ammo
+            weapon = player.weapon
+            if weapon["ammo"] < weapon["max_ammo"]:
+                weapon["ammo"] = min(weapon["ammo"] + 30, weapon["max_ammo"])
+                return True
+        return False
+
+    def draw(self, screen, camera):
+        sx, sy = camera.apply(self.x, self.y)
+
+        # Bobbing animation
+        bob = math.sin(self.bob_offset) * 3
+        sy += bob
+
+        # Blinking when about to expire
+        if self.lifetime < 120 and (self.lifetime // 10) % 2 == 0:
+            return
+
+        if self.type == "health":
+            # Health pack - red/white cross
+            pygame.draw.rect(screen, (200, 50, 50), (sx - 12, sy - 12, 24, 24), border_radius=4)
+            pygame.draw.rect(screen, (255, 255, 255), (sx - 8, sy - 3, 16, 6))  # Horizontal
+            pygame.draw.rect(screen, (255, 255, 255), (sx - 3, sy - 8, 6, 16))  # Vertical
+        elif self.type == "ammo":
+            # Ammo box - brown/gold
+            pygame.draw.rect(screen, (139, 90, 43), (sx - 12, sy - 10, 24, 20), border_radius=3)
+            pygame.draw.rect(screen, (218, 165, 32), (sx - 10, sy - 8, 20, 16), border_radius=2)
+            # Bullet icons
+            for i in range(3):
+                bx = sx - 6 + i * 6
+                pygame.draw.ellipse(screen, (255, 200, 100), (bx, sy - 5, 4, 10))
+
+
 class Player:
     def __init__(self, x, y):
         self.x = x
@@ -4813,6 +4868,8 @@ class Game:
         self.shell_casings = []  # Shell casing particles
         self.muzzle_flashes = []  # Muzzle flash effects
         self.healing_effects = []  # Healing visual effects
+        self.pickups = []  # Health and ammo pickups
+        self.pickup_spawn_timer = 0  # Timer for spawning pickups
         self.score = 0
         self.kills = 0
         self.shop_prompted = False
@@ -6271,6 +6328,35 @@ class Game:
             if not effect.update(self.player.x, self.player.y):
                 self.healing_effects.remove(effect)
 
+        # Update pickups - spawn new ones periodically
+        self.pickup_spawn_timer += 1
+        if self.pickup_spawn_timer >= 300:  # Every 5 seconds
+            self.pickup_spawn_timer = 0
+            if len(self.pickups) < 5:  # Max 5 pickups on map
+                # Random position away from walls
+                px = random.randint(150, MAP_WIDTH - 150)
+                py = random.randint(150, MAP_HEIGHT - 150)
+                pickup_type = random.choice(["health", "ammo"])
+                self.pickups.append(Pickup(px, py, pickup_type))
+
+        # Update and collect pickups
+        for pickup in self.pickups[:]:
+            if not pickup.update():
+                self.pickups.remove(pickup)
+                continue
+            # Check player 1 collection
+            dist = math.sqrt((pickup.x - self.player.x)**2 + (pickup.y - self.player.y)**2)
+            if dist < pickup.radius + self.player.radius:
+                if pickup.collect(self.player):
+                    self.pickups.remove(pickup)
+                    continue
+            # Check player 2 collection (co-op)
+            if self.player2 and self.player2.health > 0:
+                dist2 = math.sqrt((pickup.x - self.player2.x)**2 + (pickup.y - self.player2.y)**2)
+                if dist2 < pickup.radius + self.player2.radius:
+                    if pickup.collect(self.player2):
+                        self.pickups.remove(pickup)
+
         # Update bullets (with collision detection)
         for bullet in self.bullets[:]:
             bullet.update()
@@ -6651,6 +6737,10 @@ class Game:
         # Draw obstacles
         for obs in self.obstacles:
             obs.draw(surface, camera)
+
+        # Draw pickups
+        for pickup in self.pickups:
+            pickup.draw(surface, camera)
 
         # Draw bullets
         for bullet in self.bullets:
@@ -7812,6 +7902,10 @@ class Game:
                 # Draw obstacles
                 for obs in self.obstacles:
                     obs.draw(self.screen, self.camera)
+
+                # Draw pickups
+                for pickup in self.pickups:
+                    pickup.draw(self.screen, self.camera)
 
                 # Draw bullets
                 for bullet in self.bullets:
