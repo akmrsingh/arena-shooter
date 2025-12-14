@@ -5212,8 +5212,7 @@ class Game:
 
     def _start_game_full(self):
         """Full game initialization - resets everything and spawns robots"""
-        self.reset_game()
-        self.create_obstacles()
+        self.reset_game()  # This already calls create_obstacles()
         # PvP mode has no robots
         if self.game_mode != "pvp":
             self.spawn_robots()
