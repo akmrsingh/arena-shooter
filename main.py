@@ -5153,6 +5153,15 @@ class Game:
             self.player.max_health = 10000
         self.state = "playing"
 
+    def _start_game_full(self):
+        """Full game initialization - resets everything and spawns robots"""
+        self.reset_game()
+        self.spawn_obstacles()
+        # PvP mode has no robots
+        if self.game_mode != "pvp":
+            self.spawn_robots()
+        self.state = "playing"
+
     def _precache_weapon_texts(self):
         """Pre-cache all weapon text renders to avoid stutters during gameplay"""
         # The HUD uses the "weapon" cache key with (text, color) as the lookup key
@@ -5344,23 +5353,23 @@ class Game:
                 # Check menu buttons
                 for btn_name, btn_rect in self.menu_buttons.items():
                     if btn_rect and btn_rect.collidepoint(x, y):
-                        # Solo modes - direct state change (no function call)
+                        # Solo modes - full game start
                         if btn_name == "easy":
                             self.game_mode = "solo"
                             self.difficulty = "easy"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "medium":
                             self.game_mode = "solo"
                             self.difficulty = "medium"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "hard":
                             self.game_mode = "solo"
                             self.difficulty = "hard"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "impossible":
                             self.game_mode = "solo"
                             self.difficulty = "impossible"
-                            self.state = "playing"
+                            self._start_game_full()
                         # Online modes
                         elif btn_name == "online_coop":
                             self.online_game_mode = "coop"
@@ -5382,27 +5391,27 @@ class Game:
                             self.state = "online_menu"
                             self.online_input_code = ""
                             self.online_message = ""
-                        # Local multiplayer - direct state change
+                        # Local multiplayer - full game start
                         elif btn_name == "local_pvp":
                             self.game_mode = "pvp"
                             self.difficulty = "pvp"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "coop_easy":
                             self.game_mode = "coop"
                             self.difficulty = "easy"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "coop_med":
                             self.game_mode = "coop"
                             self.difficulty = "medium"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "coop_hard":
                             self.game_mode = "coop"
                             self.difficulty = "hard"
-                            self.state = "playing"
+                            self._start_game_full()
                         elif btn_name == "coop_imp":
                             self.game_mode = "coop"
                             self.difficulty = "impossible"
-                            self.state = "playing"
+                            self._start_game_full()
                         # Map selection
                         elif btn_name == "map_left":
                             self.map_index = (self.map_index - 1) % len(self.map_names)
@@ -7765,18 +7774,7 @@ class Game:
             self.draw_waiting_screen()
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
-            # TEST: Simple rendering only
-            self.camera.update(self.player.x, self.player.y)
-            self.draw_background()
-            for obs in self.obstacles:
-                obs.draw(self.screen, self.camera)
-            for robot in self.robots:
-                robot.draw(self.screen, self.camera)
-            self.player.draw(self.screen, self.camera)
-            self.draw_hud()
-            self.draw_minimap()
-
-        if False:  # DISABLED: Full rendering
+            # Full rendering
             if self.split_screen and self.player2:
                 # Split-screen rendering for local multiplayer
                 half_width = SCREEN_WIDTH // 2
