@@ -27,14 +27,15 @@ jobs:
           mkdir -p build/web
           pygbag --build main.py
 
-      - name: Inject PeerJS for multiplayer
-        run: |
-          # Add PeerJS script to index.html before </head>
-          sed -i 's|</head>|<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>\n</head>|' build/web/index.html
-          # Copy multiplayer.js to build folder
-          cp multiplayer.js build/web/
-          # Add multiplayer.js script to index.html before </body>
-          sed -i 's|</body>|<script src="multiplayer.js"></script>\n</body>|' build/web/index.html
+      # DISABLED: Testing if PeerJS causes freeze
+      # - name: Inject PeerJS for multiplayer
+      #   run: |
+      #     # Add PeerJS script to index.html before </head>
+      #     sed -i 's|</head>|<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>\n</head>|' build/web/index.html
+      #     # Copy multiplayer.js to build folder
+      #     cp multiplayer.js build/web/
+      #     # Add multiplayer.js script to index.html before </body>
+      #     sed -i 's|</body>|<script src="multiplayer.js"></script>\n</body>|' build/web/index.html
 
       # DISABLED: Firebase may be causing freeze
       # - name: Add Firebase cloud accounts
