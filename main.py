@@ -6327,35 +6327,8 @@ class Game:
             if not effect.update(self.player.x, self.player.y):
                 self.healing_effects.remove(effect)
 
-        # Update pickups - spawn new ones periodically
-        if hasattr(self, 'pickup_spawn_timer') and hasattr(self, 'pickups'):
-            self.pickup_spawn_timer += 1
-            if self.pickup_spawn_timer >= 300:  # Every 5 seconds
-                self.pickup_spawn_timer = 0
-                if len(self.pickups) < 5:  # Max 5 pickups on map
-                    # Random position away from walls
-                    px = random.randint(150, MAP_WIDTH - 150)
-                    py = random.randint(150, MAP_HEIGHT - 150)
-                    pickup_type = random.choice(["health", "ammo"])
-                    self.pickups.append(Pickup(px, py, pickup_type))
-
-            # Update and collect pickups
-            for pickup in self.pickups[:]:
-                if not pickup.update():
-                    self.pickups.remove(pickup)
-                    continue
-                # Check player 1 collection
-                dist = math.sqrt((pickup.x - self.player.x)**2 + (pickup.y - self.player.y)**2)
-                if dist < pickup.radius + self.player.radius:
-                    if pickup.collect(self.player):
-                        self.pickups.remove(pickup)
-                        continue
-                # Check player 2 collection (co-op)
-                if self.player2 and self.player2.health > 0:
-                    dist2 = math.sqrt((pickup.x - self.player2.x)**2 + (pickup.y - self.player2.y)**2)
-                    if dist2 < pickup.radius + self.player2.radius:
-                        if pickup.collect(self.player2):
-                            self.pickups.remove(pickup)
+        # DISABLED: Pickups temporarily disabled for testing freeze
+        # Update pickups code removed
 
         # Update bullets (with collision detection)
         for bullet in self.bullets[:]:
@@ -6738,9 +6711,9 @@ class Game:
         for obs in self.obstacles:
             obs.draw(surface, camera)
 
-        # Draw pickups
-        for pickup in self.pickups:
-            pickup.draw(surface, camera)
+        # Draw pickups - DISABLED
+        # for pickup in self.pickups:
+        #     pickup.draw(surface, camera)
 
         # Draw bullets
         for bullet in self.bullets:
@@ -7903,9 +7876,9 @@ class Game:
                 for obs in self.obstacles:
                     obs.draw(self.screen, self.camera)
 
-                # Draw pickups
-                for pickup in self.pickups:
-                    pickup.draw(self.screen, self.camera)
+                # Draw pickups - DISABLED
+                # for pickup in self.pickups:
+                #     pickup.draw(self.screen, self.camera)
 
                 # Draw bullets
                 for bullet in self.bullets:
