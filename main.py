@@ -5211,7 +5211,14 @@ class Game:
         self.state = "playing"
 
     def _start_game_full(self):
-        """Full game initialization - resets everything and spawns robots"""
+        """Request full game initialization - deferred to update() to avoid freeze"""
+        # Set flag to defer heavy initialization to update loop
+        # This prevents browser freeze when clicking menu buttons
+        self._need_start_game_full = True
+        self.state = "loading"  # Show loading state briefly
+
+    def _do_start_game_full(self):
+        """Actually perform full game initialization (called from update)"""
         self.reset_game()  # This already calls create_obstacles()
         # PvP mode has no robots
         if self.game_mode != "pvp":
@@ -6220,6 +6227,12 @@ class Game:
         if getattr(self, '_need_start_game', False):
             self._need_start_game = False
             self.start_game(self.difficulty)
+            return
+
+        # Deferred full game start (avoids freeze when clicking menu buttons)
+        if getattr(self, '_need_start_game_full', False):
+            self._need_start_game_full = False
+            self._do_start_game_full()
             return
 
         # TEST: Skip cloud login check (may be causing freeze)
@@ -7835,6 +7848,14 @@ class Game:
 
         elif self.state == "waiting":
             self.draw_waiting_screen()
+
+        elif self.state == "loading":
+            # Simple loading screen to prevent freeze
+            self.screen.fill((25, 25, 35))
+            loading_text = self.big_font.render("LOADING...", True, (200, 200, 200))
+            self.screen.blit(loading_text, (SCREEN_WIDTH // 2 - loading_text.get_width() // 2, SCREEN_HEIGHT // 2 - 30))
+            pygame.display.flip()
+            return  # Skip rest of draw while loading
 
         elif self.state == "playing" or self.state == "gameover" or self.state == "shop" or self.state == "avatar_shop":
             # Full rendering
