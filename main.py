@@ -5223,6 +5223,10 @@ class Game:
         # PvP mode has no robots
         if self.game_mode != "pvp":
             self.spawn_robots()
+        # Initialize camera to player position immediately
+        self.camera.update(self.player.x, self.player.y)
+        if self.player2:
+            self.camera2.update(self.player2.x, self.player2.y)
         self.state = "playing"
 
     def _precache_weapon_texts(self):
@@ -6233,7 +6237,7 @@ class Game:
         if getattr(self, '_need_start_game_full', False):
             self._need_start_game_full = False
             self._do_start_game_full()
-            return
+            # Don't return - let game update continue immediately
 
         # TEST: Skip cloud login check (may be causing freeze)
         # if self.cloud_login_pending:
